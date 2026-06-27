@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=build-prospectorMahery-%j
+#SBATCH --job-name=build-Workbench-%j
 
 # Resources
 #SBATCH --partition=hsph
@@ -8,8 +8,8 @@
 #SBATCH --time=04:00:00
 
 # Logging
-#SBATCH --output=/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors/prospectorMahery/slurm/build/logs/build_%j.out
-#SBATCH --error=/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors/prospectorMahery/slurm/build/logs/build_%j.err
+#SBATCH --output=/n/holylabs/LABS/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench/slurm/build/logs/build_%j.out
+#SBATCH --error=/n/holylabs/LABS/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench/slurm/build/logs/build_%j.err
 
 ###############################################################################
 # Strict shell behavior
@@ -22,7 +22,7 @@ module purge
 # Project paths
 ###############################################################################
 
-PROJECT_DIR=/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors/prospectorMahery
+PROJECT_DIR=/n/holylabs/LABS/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench
 cd "${PROJECT_DIR}"
 
 ###############################################################################

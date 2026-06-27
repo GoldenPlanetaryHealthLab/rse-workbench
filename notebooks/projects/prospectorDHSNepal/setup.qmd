@@ -1,0 +1,566 @@
+---
+title: "RSE Workbench Environment Scaffold"
+subtitle: "Prospector: DHSNepal"
+format: html
+execute:
+  eval: false
+---
+
+This notebook develops the environment scaffold for a research project.
+
+The purpose of this notebook is not to be the final runtime environment. Instead, it is a narrated construction space where we decide what the project needs, experiment with environment-management tools, and write durable definition files back to the project repository.
+
+Final durable outputs may include:
+
+- `.devcontainer/Singularity.def`
+- `spack.yaml`
+- `rproject.toml`
+- `pyproject.toml`
+- `uv.lock`
+- `renv.lock`
+- `sbatch/BUILD`
+- `sbatch/LAUNCH`
+
+The RSE Workbench owns the scaffolding process. The project owns the definitions.
+
+## 0. Project configuration
+
+Edit this chunk first.
+
+```{python}
+#| eval: true
+from pathlib import Path
+import os
+import subprocess
+from textwrap import dedent
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.columns import Columns
+
+console = Console()
+
+USER = os.environ["USER"]
+
+PROJECT_NAME = "prospectorDHSNepal"
+
+PROJECT_DIR = Path(
+    "/n/holylabs/cgolden_lab/Lab/frontier/works/prospectors/prospectorDHSNepal"
+)
+
+WORKBENCH_DIR = Path(
+    "/n/holylabs/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench"
+)
+
+RUNTIME_DIR = WORKBENCH_DIR / "projects" / PROJECT_NAME
+
+NOTEBOOK_DIR = RUNTIME_DIR / "notebooks"
+SCRATCH_DIR = RUNTIME_DIR / "scratch"
+LOG_DIR = RUNTIME_DIR / "logs"
+CACHE_DIR = RUNTIME_DIR / "cache" / USER
+
+DEVCONTAINER_DIR = PROJECT_DIR / ".devcontainer"
+SBATCH_DIR = PROJECT_DIR / "sbatch"
+
+for path in [
+    RUNTIME_DIR,
+    NOTEBOOK_DIR,
+    SCRATCH_DIR,
+    LOG_DIR,
+    CACHE_DIR,
+    DEVCONTAINER_DIR,
+    SBATCH_DIR,
+]:
+    path.mkdir(parents=True, exist_ok=True)
+
+console.print(
+    Panel.fit(
+        f"Project name: {PROJECT_NAME}\n"
+        f"Project dir: {PROJECT_DIR}\n"
+        f"Workbench dir: {WORKBENCH_DIR}\n"
+        f"Runtime dir: {RUNTIME_DIR}",
+        title="RSE Workbench Scaffold",
+    )
+)
+```
+
+## 1. Project environment decision record
+
+Use this section to decide what kind of environment this project needs.
+
+```{python}
+#| eval: true
+PROJECT_PROFILE = {
+    "requires_containerisation": True,
+    "language_focus": "both",  # "r", "python", or "both"
+    "requires_geospatial": True,
+    "requires_high_throughput_data": True,
+    "requires_low_level_libraries": True,
+    "requires_vscode": True,
+    "requires_code_server": True,
+    "requires_zsh_affordances": True,
+}
+
+PROJECT_PROFILE
+```
+
+### Decision notes
+
+This project requires containerisation if one or more of the following are true:
+
+- the project needs system libraries that are not reliably available on the cluster;
+- the project needs reproducible R/Python/GDAL/GEOS/PROJ/Arrow/DuckDB compatibility;
+- collaborators need a consistent VSCode environment;
+- the environment must be launched repeatedly through Slurm;
+- the project needs developer affordances such as `code-server`, `zsh`, and R/Python language tooling.
+
+## 2. Helper functions
+
+```{python}
+#| eval: true
+def run(cmd, cwd=PROJECT_DIR, check=False):
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        cwd=str(cwd),
+        text=True,
+        capture_output=True,
+    )
+
+    if check and result.returncode != 0:
+        show(result)
+        raise RuntimeError(f"Command failed with exit code {result.returncode}")
+
+    return result
+
+
+def show(result):
+    stdout = Panel(
+        result.stdout.rstrip() or "<empty>",
+        title="stdout",
+        border_style="green",
+    )
+
+    stderr = Panel(
+        result.stderr.rstrip() or "<empty>",
+        title="stderr",
+        border_style="yellow",
+    )
+
+    console.print(
+        Panel(
+            Columns([stdout, stderr]),
+            title=f"Exit code: {result.returncode}",
+            subtitle=str(result.args),
+            border_style="green" if result.returncode == 0 else "red",
+        )
+    )
+```
+
+## 3. Inspect project language focus
+
+```{python}
+#| eval: true
+project_files = {
+    "rproject.toml": PROJECT_DIR / "rproject.toml",
+    "DESCRIPTION": PROJECT_DIR / "DESCRIPTION",
+    "renv.lock": PROJECT_DIR / "renv.lock",
+    "pyproject.toml": PROJECT_DIR / "pyproject.toml",
+    "uv.lock": PROJECT_DIR / "uv.lock",
+    "requirements.txt": PROJECT_DIR / "requirements.txt",
+    "spack.yaml": PROJECT_DIR / "spack.yaml",
+}
+
+{key: path.exists() for key, path in project_files.items()}
+```
+
+## 4. Install or bootstrap `rv`
+
+`rv` is used to create and manage R project metadata.
+
+```{python}
+#| eval: false
+show(run("which rv || true"))
+```
+
+```{python}
+#| eval: false
+show(run("""
+mkdir -p "$HOME/.local/bin"
+# Replace this with the canonical rv install command for the lab once finalized.
+which rv || echo "TODO: install rv here"
+"""))
+```
+
+## 5. Create or update R project metadata
+
+```{python}
+#| eval: false
+show(run("""
+rv init || true
+rv status || true
+"""))
+```
+
+Expected project-side outputs:
+
+```text
+rproject.toml
+renv.lock, if the project uses renv
+```
+
+## 6. Install or bootstrap `uv`
+
+`uv` is used to create and manage Python project metadata.
+
+```{python}
+#| eval: false
+show(run("which uv || true"))
+```
+
+```{python}
+#| eval: false
+show(run("""
+mkdir -p "$HOME/.local/bin"
+which uv || curl -LsSf https://astral.sh/uv/install.sh | sh
+"""))
+```
+
+## 7. Create or update Python project metadata
+
+```{python}
+#| eval: false
+show(run("""
+test -f pyproject.toml || uv init --bare
+uv lock || true
+"""))
+```
+
+Expected project-side outputs:
+
+```text
+pyproject.toml
+uv.lock
+```
+
+## 8. Decide whether Spack is needed
+
+Spack is needed when the project relies on system-level packages or compiled dependencies that should be reproducible across Slurm jobs and container launches.
+
+Common triggers:
+
+- `sf`, `terra`, `stars`, `units`, `s2`
+- GDAL, GEOS, PROJ, UDUNITS
+- Arrow, DuckDB, PostgreSQL, SQLite
+- image processing libraries
+- low-level compilers or build systems
+- `code-server`
+
+```{python}
+#| eval: true
+NEEDS_SPACK = (
+    PROJECT_PROFILE["requires_geospatial"]
+    or PROJECT_PROFILE["requires_high_throughput_data"]
+    or PROJECT_PROFILE["requires_low_level_libraries"]
+    or PROJECT_PROFILE["requires_code_server"]
+)
+
+NEEDS_SPACK
+```
+
+## 9. Write initial `spack.yaml`
+
+This file belongs to the project. The workbench helps author it.
+
+```{python}
+#| eval: false
+spack_yaml = dedent("""
+spack:
+  specs:
+  - r@4.5.1
+  - curl
+  - openssl
+  - cmake
+  - gmake
+  - freetype
+  - libjpeg-turbo
+  - libpng
+  - harfbuzz
+  - libxml2
+  - librsvg
+  - abseil-cpp
+  - udunits
+  - r-udunits2
+  - libssh2
+  - icu4c
+  - imagemagick
+  - cairo
+  - sqlite
+  - zstd
+  - postgresql
+  - xz
+  - pkgconf
+  - code-server
+
+  view: /opt/views/view
+
+  concretizer:
+    unify: true
+
+  config:
+    install_tree:
+      root: /opt/software
+    build_environment:
+      set:
+        PKG_CONFIG: /opt/views/view/bin/pkg-config
+        PKG_CONFIG_PATH: /opt/views/view/lib/pkgconfig:/opt/views/view/lib64/pkgconfig
+""").lstrip()
+
+(PROJECT_DIR / "spack.yaml").write_text(spack_yaml)
+console.print(f"Wrote {PROJECT_DIR / 'spack.yaml'}")
+```
+
+## 10. Containerisation decision
+
+If this project is containerised, the container should eventually include:
+
+- Spack
+- system libraries needed for R/Python packages
+- project Spack environment
+- RSE developer affordances:
+  - `code-server`
+  - `zsh`
+  - shell inheritance or bootstrap hooks
+  - `arf`, if used as the R frontend manager
+  - Python/R language support
+
+The workbench can use temporary sandboxes to explore. The final durable project output is the definition file.
+
+## 11. Write initial Singularity definition
+
+```{python}
+#| eval: false
+definition = dedent("""
+Bootstrap: docker
+From: spack/rockylinux8:develop
+
+%post
+    set -eux
+
+    dnf install -y epel-release
+    dnf install -y \\
+        cmake \\
+        make \\
+        git \\
+        curl \\
+        zsh \\
+        which \\
+        tar \\
+        gzip \\
+        unzip \\
+        bzip2 \\
+        xz \\
+        openssl-devel \\
+        libcurl-devel \\
+        libX11-devel \\
+        abseil-cpp-devel \\
+        udunits2-devel \\
+        libxml2-devel \\
+        libicu-devel \\
+        fontconfig-devel \\
+        freetype-devel \\
+        cairo-devel \\
+        libpng-devel \\
+        libtiff-devel \\
+        sqlite-devel \\
+        fribidi-devel \\
+        harfbuzz-devel
+
+    mkdir -p /work
+    mkdir -p /opt/software
+    mkdir -p /opt/views
+
+%environment
+    export LC_ALL=C
+    export LANG=C
+    export PATH=/opt/views/view/bin:/opt/spack/bin:$PATH
+    export PKG_CONFIG=/opt/views/view/bin/pkg-config
+    export PKG_CONFIG_PATH=/opt/views/view/lib/pkgconfig:/opt/views/view/lib64/pkgconfig
+
+%runscript
+    exec "$@"
+""").lstrip()
+
+DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
+DEF.write_text(definition)
+
+console.print(f"Wrote {DEF}")
+```
+
+## 12. Install the Spack environment
+
+This should usually happen inside the container build or inside an `sbatch BUILD` script, not as a fragile interactive notebook process.
+
+This notebook records and tests the command.
+
+```{python}
+#| eval: false
+SPACK_INSTALL_COMMAND = """
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d .
+spack concretize --force
+spack install --fail-fast -j8
+"""
+print(SPACK_INSTALL_COMMAND)
+```
+
+## 13. Write `sbatch/BUILD`
+
+The build script is the durable way to build the project container.
+
+```{python}
+#| eval: false
+build_script = dedent(f"""
+#!/bin/bash
+#SBATCH --job-name=build-{PROJECT_NAME}
+#SBATCH --time=08:00:00
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --output={PROJECT_DIR}/sbatch/build-%j.out
+#SBATCH --error={PROJECT_DIR}/sbatch/build-%j.err
+
+set -euo pipefail
+
+PROJECT_DIR="{PROJECT_DIR}"
+SIF="{PROJECT_DIR}/.devcontainer/{PROJECT_NAME.lower()}-amd64.sif"
+DEF="{PROJECT_DIR}/.devcontainer/Singularity.def"
+
+cd "$PROJECT_DIR"
+
+singularity build --fakeroot --force "$SIF" "$DEF"
+""").lstrip()
+
+build_path = SBATCH_DIR / "BUILD"
+build_path.write_text(build_script)
+build_path.chmod(0o755)
+
+console.print(f"Wrote {build_path}")
+```
+
+## 14. Write `sbatch/LAUNCH`
+
+The launch script starts the final VSCode/code-server environment.
+
+```{python}
+#| eval: false
+launch_script = dedent(f"""
+#!/bin/bash
+#SBATCH --job-name=launch-{PROJECT_NAME}
+#SBATCH --time=08:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=24G
+#SBATCH --output={PROJECT_DIR}/sbatch/launch-%j.out
+#SBATCH --error={PROJECT_DIR}/sbatch/launch-%j.err
+
+set -euo pipefail
+
+PROJECT_DIR="{PROJECT_DIR}"
+SIF="{PROJECT_DIR}/.devcontainer/{PROJECT_NAME.lower()}-amd64.sif"
+PORT="${{PORT:-8026}}"
+
+cd "$PROJECT_DIR"
+
+singularity exec \\
+    --no-home \\
+    --bind "$PROJECT_DIR:/work" \\
+    "$SIF" \\
+    bash --noprofile --norc -lc "
+        cd /work
+        . /opt/spack/share/spack/setup-env.sh || true
+        spack env activate -d . || true
+        code-server --bind-addr 0.0.0.0:$PORT /work
+    "
+""").lstrip()
+
+launch_path = SBATCH_DIR / "LAUNCH"
+launch_path.write_text(launch_script)
+launch_path.chmod(0o755)
+
+console.print(f"Wrote {launch_path}")
+```
+
+## 15. RSE developer affordances
+
+These are optional but useful when the project is containerised.
+
+### `zsh`
+
+The container should include `zsh`. The launch script can inherit lab/user shell configuration only if those paths are explicitly bound.
+
+```{python}
+#| eval: false
+show(run("grep -n 'zsh' .devcontainer/Singularity.def || true"))
+```
+
+### `code-server`
+
+`code-server` may be installed through Spack or by another scripted installer. If installed through Spack, keep it in `spack.yaml`.
+
+```{python}
+#| eval: false
+show(run("grep -n 'code-server' spack.yaml || true"))
+```
+
+### `arf`
+
+`arf` should be installed if this project needs an R frontend manager.
+
+```{python}
+#| eval: false
+show(run("""
+which arf || echo "TODO: install arf here once canonical install method is finalized"
+"""))
+```
+
+## 16. Project environment installation
+
+Once the system/container environment is available, install the project-level R/Python environment.
+
+```{python}
+#| eval: false
+show(run("""
+if test -f pyproject.toml; then
+    uv sync || true
+fi
+
+if test -f rproject.toml; then
+    rv status || true
+fi
+"""))
+```
+
+## 17. Final checklist
+
+The scaffold is complete when the following files exist in the project:
+
+```{python}
+#| eval: true
+expected_outputs = [
+    PROJECT_DIR / ".devcontainer" / "Singularity.def",
+    PROJECT_DIR / "spack.yaml",
+    PROJECT_DIR / "sbatch" / "BUILD",
+    PROJECT_DIR / "sbatch" / "LAUNCH",
+]
+
+{str(path): path.exists() for path in expected_outputs}
+```
+
+Recommended next commands:
+
+```bash
+sbatch sbatch/BUILD
+sbatch sbatch/LAUNCH
+```
+
+The workbench notebook can now be copied into the project as documentation of how the environment was scaffolded.
