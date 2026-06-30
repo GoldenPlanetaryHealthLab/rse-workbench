@@ -1,1 +1,0 @@
-/n/holylabs/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench/notebooks/prospector_dhsnepal/log_test/24987501/24987501_submission.sh

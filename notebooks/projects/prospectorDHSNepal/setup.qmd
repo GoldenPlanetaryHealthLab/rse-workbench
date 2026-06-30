@@ -1,566 +1,828 @@
 ---
-title: "RSE Workbench Environment Scaffold"
+title: "RSE Workbench Build Container"
 subtitle: "Prospector: DHSNepal"
-format: html
+format: gfm
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "task_build_dhsnepal"
+    output-dir: "../../../src/projects/prospectorDHSNepal/tasks"
+  sorting-hat:
+        keep: python
 execute:
   eval: false
 ---
 
-This notebook develops the environment scaffold for a research project.
+This notebook is a record of the steps taken to build a base container 
+for the Prospector: DHSNepal. The base container is built on top 
+of Spack containers, which provides a consistent 
+environment for running RSE Workbench projects. It also uses
+`pytask` to manage the step by step execution of the build
+process. To do this, code chunks are exported to a `tasks` directory,
+which can be run with `pytask` to build the final container.
 
-The purpose of this notebook is not to be the final runtime environment. Instead, it is a narrated construction space where we decide what the project needs, experiment with environment-management tools, and write durable definition files back to the project repository.
-
-Final durable outputs may include:
-
-- `.devcontainer/Singularity.def`
-- `spack.yaml`
-- `rproject.toml`
-- `pyproject.toml`
-- `uv.lock`
-- `renv.lock`
-- `sbatch/BUILD`
-- `sbatch/LAUNCH`
-
-The RSE Workbench owns the scaffolding process. The project owns the definitions.
-
-## 0. Project configuration
-
-Edit this chunk first.
 
 ```{python}
-#| eval: true
+#| sorting-hat: remove
 from pathlib import Path
+from pyprojroot import here
 import os
-import subprocess
-from textwrap import dedent
+
+PROJECT_NAME = "prospectorDHSNepal"
+PROJECT_DIR = Path("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors/prospectorDHSNepal")
+WORKBENCH_DIR = here() / "notebooks/projects/rse-workbench"
+RUNTIME_DIR = WORKBENCH_DIR / "projects" / PROJECT_NAME
+
+TMP_SANDBOX = Path(f"/tmp/{os.environ['USER']}-{PROJECT_NAME}-sandbox")
+BASE_IMAGE = "docker://spack/rockylinux8:develop"
+```
+
+First, we build the image with the `spython` client. The base image is a 
+Spack container based on Rocky Linux 8, which is what the 
+FASRC nodes use.
+
+`--fakeroot` is used to build the image without root privileges, 
+`--sandbox` is used to build the image in a temporary directory, and `--force` is used to overwrite any existing image with the same name.
+
+```{python}
+from spython.main import Client
+```
+
+```{python}
+#| eval: false
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=BASE_IMAGE,
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+To inspect this, we can use the `spython` client to run a shell in the container.
+
+```{python}
+#| eval: false
+def spython_exec(
+    command,
+    *,
+    image=TMP_SANDBOX,
+    writable=False,
+    fakeroot=False,
+    bind_project=False,
+):
+    options = ["--no-home"]
+
+    if writable:
+        options.append("--writable")
+
+    if fakeroot:
+        options.append("--fakeroot")
+
+    if bind_project:
+        options += ["--bind", f"{PROJECT_DIR}:/work"]
+
+    return Client.execute(
+        image=str(image),
+        command=["bash", "--noprofile", "--norc", "-c", command],
+        options=options,
+        sudo=False,
+        return_result=True
+    )
+
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.columns import Columns
+from rich.syntax import Syntax
 
 console = Console()
 
-USER = os.environ["USER"]
 
-PROJECT_NAME = "prospectorDHSNepal"
+def normalize_spython_result(result):
+    message = result.get("message", "")
+    return_code = result.get("return_code", None)
 
-PROJECT_DIR = Path(
-    "/n/holylabs/cgolden_lab/Lab/frontier/works/prospectors/prospectorDHSNepal"
-)
+    if isinstance(message, list):
+        stdout = message[0] if len(message) > 0 else ""
+        stderr = message[1] if len(message) > 1 else ""
+    else:
+        stdout = message or ""
+        stderr = ""
 
-WORKBENCH_DIR = Path(
-    "/n/holylabs/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench"
-)
-
-RUNTIME_DIR = WORKBENCH_DIR / "projects" / PROJECT_NAME
-
-NOTEBOOK_DIR = RUNTIME_DIR / "notebooks"
-SCRATCH_DIR = RUNTIME_DIR / "scratch"
-LOG_DIR = RUNTIME_DIR / "logs"
-CACHE_DIR = RUNTIME_DIR / "cache" / USER
-
-DEVCONTAINER_DIR = PROJECT_DIR / ".devcontainer"
-SBATCH_DIR = PROJECT_DIR / "sbatch"
-
-for path in [
-    RUNTIME_DIR,
-    NOTEBOOK_DIR,
-    SCRATCH_DIR,
-    LOG_DIR,
-    CACHE_DIR,
-    DEVCONTAINER_DIR,
-    SBATCH_DIR,
-]:
-    path.mkdir(parents=True, exist_ok=True)
-
-console.print(
-    Panel.fit(
-        f"Project name: {PROJECT_NAME}\n"
-        f"Project dir: {PROJECT_DIR}\n"
-        f"Workbench dir: {WORKBENCH_DIR}\n"
-        f"Runtime dir: {RUNTIME_DIR}",
-        title="RSE Workbench Scaffold",
-    )
-)
-```
-
-## 1. Project environment decision record
-
-Use this section to decide what kind of environment this project needs.
-
-```{python}
-#| eval: true
-PROJECT_PROFILE = {
-    "requires_containerisation": True,
-    "language_focus": "both",  # "r", "python", or "both"
-    "requires_geospatial": True,
-    "requires_high_throughput_data": True,
-    "requires_low_level_libraries": True,
-    "requires_vscode": True,
-    "requires_code_server": True,
-    "requires_zsh_affordances": True,
-}
-
-PROJECT_PROFILE
-```
-
-### Decision notes
-
-This project requires containerisation if one or more of the following are true:
-
-- the project needs system libraries that are not reliably available on the cluster;
-- the project needs reproducible R/Python/GDAL/GEOS/PROJ/Arrow/DuckDB compatibility;
-- collaborators need a consistent VSCode environment;
-- the environment must be launched repeatedly through Slurm;
-- the project needs developer affordances such as `code-server`, `zsh`, and R/Python language tooling.
-
-## 2. Helper functions
-
-```{python}
-#| eval: true
-def run(cmd, cwd=PROJECT_DIR, check=False):
-    result = subprocess.run(
-        cmd,
-        shell=True,
-        cwd=str(cwd),
-        text=True,
-        capture_output=True,
-    )
-
-    if check and result.returncode != 0:
-        show(result)
-        raise RuntimeError(f"Command failed with exit code {result.returncode}")
-
-    return result
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "return_code": return_code,
+        "raw": result,
+    }
 
 
-def show(result):
-    stdout = Panel(
-        result.stdout.rstrip() or "<empty>",
-        title="stdout",
+def show_spython(result, *, tail=None):
+    normalized = normalize_spython_result(result)
+
+    stdout = normalized["stdout"]
+    stderr = normalized["stderr"]
+    return_code = normalized["return_code"]
+
+    if tail is not None:
+        stdout = "\n".join(stdout.splitlines()[-tail:])
+        stderr = "\n".join(stderr.splitlines()[-tail:])
+
+    stdout_panel = Panel(
+        Syntax(stdout.rstrip() or "<empty>", "text"),
+        title="stdout / message",
         border_style="green",
     )
 
-    stderr = Panel(
-        result.stderr.rstrip() or "<empty>",
+    stderr_panel = Panel(
+        Syntax(stderr.rstrip() or "<empty>", "text"),
         title="stderr",
-        border_style="yellow",
+        border_style="yellow" if return_code == 0 else "red",
     )
 
     console.print(
         Panel(
-            Columns([stdout, stderr]),
-            title=f"Exit code: {result.returncode}",
-            subtitle=str(result.args),
-            border_style="green" if result.returncode == 0 else "red",
+            Columns([stdout_panel, stderr_panel]),
+            title=f"Exit code: {return_code}",
+            border_style="green" if return_code == 0 else "red",
         )
     )
-```
 
-## 3. Inspect project language focus
-
-```{python}
-#| eval: true
-project_files = {
-    "rproject.toml": PROJECT_DIR / "rproject.toml",
-    "DESCRIPTION": PROJECT_DIR / "DESCRIPTION",
-    "renv.lock": PROJECT_DIR / "renv.lock",
-    "pyproject.toml": PROJECT_DIR / "pyproject.toml",
-    "uv.lock": PROJECT_DIR / "uv.lock",
-    "requirements.txt": PROJECT_DIR / "requirements.txt",
-    "spack.yaml": PROJECT_DIR / "spack.yaml",
-}
-
-{key: path.exists() for key, path in project_files.items()}
-```
-
-## 4. Install or bootstrap `rv`
-
-`rv` is used to create and manage R project metadata.
-
-```{python}
-#| eval: false
-show(run("which rv || true"))
+    return normalized
 ```
 
 ```{python}
 #| eval: false
-show(run("""
-mkdir -p "$HOME/.local/bin"
-# Replace this with the canonical rv install command for the lab once finalized.
-which rv || echo "TODO: install rv here"
-"""))
-```
-
-## 5. Create or update R project metadata
-
-```{python}
-#| eval: false
-show(run("""
-rv init || true
-rv status || true
-"""))
-```
-
-Expected project-side outputs:
-
-```text
-rproject.toml
-renv.lock, if the project uses renv
-```
-
-## 6. Install or bootstrap `uv`
-
-`uv` is used to create and manage Python project metadata.
-
-```{python}
-#| eval: false
-show(run("which uv || true"))
-```
-
-```{python}
-#| eval: false
-show(run("""
-mkdir -p "$HOME/.local/bin"
-which uv || curl -LsSf https://astral.sh/uv/install.sh | sh
-"""))
-```
-
-## 7. Create or update Python project metadata
-
-```{python}
-#| eval: false
-show(run("""
-test -f pyproject.toml || uv init --bare
-uv lock || true
-"""))
-```
-
-Expected project-side outputs:
-
-```text
-pyproject.toml
-uv.lock
-```
-
-## 8. Decide whether Spack is needed
-
-Spack is needed when the project relies on system-level packages or compiled dependencies that should be reproducible across Slurm jobs and container launches.
-
-Common triggers:
-
-- `sf`, `terra`, `stars`, `units`, `s2`
-- GDAL, GEOS, PROJ, UDUNITS
-- Arrow, DuckDB, PostgreSQL, SQLite
-- image processing libraries
-- low-level compilers or build systems
-- `code-server`
-
-```{python}
-#| eval: true
-NEEDS_SPACK = (
-    PROJECT_PROFILE["requires_geospatial"]
-    or PROJECT_PROFILE["requires_high_throughput_data"]
-    or PROJECT_PROFILE["requires_low_level_libraries"]
-    or PROJECT_PROFILE["requires_code_server"]
+show_spython(
+    spython_exec(
+        ". /opt/spack/share/spack/setup-env.sh && spack --version"
+    )
 )
-
-NEEDS_SPACK
 ```
 
-## 9. Write initial `spack.yaml`
-
-This file belongs to the project. The workbench helps author it.
+Next, we add the `work` directory:
 
 ```{python}
 #| eval: false
-spack_yaml = dedent("""
+show_spython(
+    spython_exec(
+        "mkdir -p /work",
+        writable=True
+    )
+)
+```
+
+
+```{python}
+#| eval: false
+show_spython(
+    spython_exec(
+        "ls -l /work",
+        writable=True
+    )
+)
+```
+
+Now, we check to make sure we can bind the project dir into it:
+
+```{python}
+#| eval: false
+show_spython(
+    spython_exec(
+        "ls -l /work",
+        writable=True,
+        bind_project=True
+    )
+)
+```
+
+Perfect! Now, we add details to the spack file to define what dependencies
+we want to install in the container. To do this, we'll
+need R running in the container. Let's check to see if R is installed:
+
+
+```{python}
+#| eval: false
+show_spython(
+    spython_exec(
+        ". /opt/spack/share/spack/setup-env.sh && R --version",
+        bind_project=True
+    )
+)
+```
+
+Command not found; so let's write a basic spack yaml, bind it into
+the project, and have spack install R inside it:
+
+
+```{python}
+SPACK_YAML = """
 spack:
   specs:
   - r@4.5.1
-  - curl
-  - openssl
-  - cmake
-  - gmake
-  - freetype
-  - libjpeg-turbo
-  - libpng
-  - harfbuzz
-  - libxml2
-  - librsvg
-  - abseil-cpp
-  - udunits
-  - r-udunits2
-  - libssh2
-  - icu4c
-  - imagemagick
-  - cairo
-  - sqlite
-  - zstd
-  - postgresql
-  - xz
-  - pkgconf
-  - code-server
+  view: true
+"""
+with open(PROJECT_DIR / "spack.yaml", "w") as f:
+    f.write(SPACK_YAML)
 
-  view: /opt/views/view
+show_spython(
+    spython_exec(
+        """
+        . /opt/spack/share/spack/setup-env.sh && 
+        cd /work &&
+        spack env activate --create -d . &&
+        spack env st
+        """,
+        writable=True,
+        bind_project=True
+    )
+)
 
-  concretizer:
-    unify: true
-
-  config:
-    install_tree:
-      root: /opt/software
-    build_environment:
-      set:
-        PKG_CONFIG: /opt/views/view/bin/pkg-config
-        PKG_CONFIG_PATH: /opt/views/view/lib/pkgconfig:/opt/views/view/lib64/pkgconfig
-""").lstrip()
-
-(PROJECT_DIR / "spack.yaml").write_text(spack_yaml)
-console.print(f"Wrote {PROJECT_DIR / 'spack.yaml'}")
+show_spython(
+    spython_exec(
+        """
+        . /opt/spack/share/spack/setup-env.sh && 
+        cd /work &&
+        spack env activate -d . &&
+        spack concretize &&
+        spack install
+        """,
+        writable=True,
+        bind_project=True
+    )
+)
 ```
 
-## 10. Containerisation decision
+We're having issues with the correct compiler, so we're going to try and isolate the issue:
 
-If this project is containerised, the container should eventually include:
-
-- Spack
-- system libraries needed for R/Python packages
-- project Spack environment
-- RSE developer affordances:
-  - `code-server`
-  - `zsh`
-  - shell inheritance or bootstrap hooks
-  - `arf`, if used as the R frontend manager
-  - Python/R language support
-
-The workbench can use temporary sandboxes to explore. The final durable project output is the definition file.
-
-## 11. Write initial Singularity definition
 
 ```{python}
-#| eval: false
-definition = dedent("""
-Bootstrap: docker
-From: spack/rockylinux8:develop
+show_spython(spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+export SPACK_USER_CONFIG_PATH=/tmp/spack-user-config
+export SPACK_USER_CACHE_PATH=/tmp/spack-user-cache
+export SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache
 
-%post
-    set -eux
+rm -rf /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache
+mkdir -p /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache
 
-    dnf install -y epel-release
-    dnf install -y \\
-        cmake \\
-        make \\
-        git \\
-        curl \\
-        zsh \\
-        which \\
-        tar \\
-        gzip \\
-        unzip \\
-        bzip2 \\
-        xz \\
-        openssl-devel \\
-        libcurl-devel \\
-        libX11-devel \\
-        abseil-cpp-devel \\
-        udunits2-devel \\
-        libxml2-devel \\
-        libicu-devel \\
-        fontconfig-devel \\
-        freetype-devel \\
-        cairo-devel \\
-        libpng-devel \\
-        libtiff-devel \\
-        sqlite-devel \\
-        fribidi-devel \\
-        harfbuzz-devel
+. /opt/spack/share/spack/setup-env.sh
 
-    mkdir -p /work
-    mkdir -p /opt/software
-    mkdir -p /opt/views
-
-%environment
-    export LC_ALL=C
-    export LANG=C
-    export PATH=/opt/views/view/bin:/opt/spack/bin:$PATH
-    export PKG_CONFIG=/opt/views/view/bin/pkg-config
-    export PKG_CONFIG_PATH=/opt/views/view/lib/pkgconfig:/opt/views/view/lib64/pkgconfig
-
-%runscript
-    exec "$@"
-""").lstrip()
-
-DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
-DEF.write_text(definition)
-
-console.print(f"Wrote {DEF}")
+spack config blame repos || true
+spack config blame packages || true
+spack compiler list || true
+""", writable=True, bind_project=True)
+)
 ```
 
-## 12. Install the Spack environment
-
-This should usually happen inside the container build or inside an `sbatch BUILD` script, not as a fragile interactive notebook process.
-
-This notebook records and tests the command.
+No errors there. Let's try again:
 
 ```{python}
-#| eval: false
-SPACK_INSTALL_COMMAND = """
+show_spython(spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+export SPACK_USER_CONFIG_PATH=/tmp/spack-user-config
+export SPACK_USER_CACHE_PATH=/tmp/spack-user-cache
+export SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache
+
+mkdir -p /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache
+
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d . &&
+spack concretize &&
+spack install --fail-fast -j8
+""", writable=True, bind_project=True)
+)
+```
+
+It failed with something called `expat`, telling us to 
+tell it explicitly whether it is deprecated or not.
+
+```{python}
+
+show_spython(spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+
 . /opt/spack/share/spack/setup-env.sh
 cd /work
 spack env activate -d .
+
 spack concretize --force
-spack install --fail-fast -j8
-"""
-print(SPACK_INSTALL_COMMAND)
+spack install --deprecated --fail-fast -j12
+""", writable=True, bind_project=True))
 ```
 
-## 13. Write `sbatch/BUILD`
+That worked. So now, we can use R to install the packages
+we need for the project, building the spack yaml as needed
+for each step.
 
-The build script is the durable way to build the project container.
-
-```{python}
-#| eval: false
-build_script = dedent(f"""
-#!/bin/bash
-#SBATCH --job-name=build-{PROJECT_NAME}
-#SBATCH --time=08:00:00
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --output={PROJECT_DIR}/sbatch/build-%j.out
-#SBATCH --error={PROJECT_DIR}/sbatch/build-%j.err
-
-set -euo pipefail
-
-PROJECT_DIR="{PROJECT_DIR}"
-SIF="{PROJECT_DIR}/.devcontainer/{PROJECT_NAME.lower()}-amd64.sif"
-DEF="{PROJECT_DIR}/.devcontainer/Singularity.def"
-
-cd "$PROJECT_DIR"
-
-singularity build --fakeroot --force "$SIF" "$DEF"
-""").lstrip()
-
-build_path = SBATCH_DIR / "BUILD"
-build_path.write_text(build_script)
-build_path.chmod(0o755)
-
-console.print(f"Wrote {build_path}")
-```
-
-## 14. Write `sbatch/LAUNCH`
-
-The launch script starts the final VSCode/code-server environment.
+First, though, we need the RV package, which is a rust
+binary. We can add it to the Singularity Recipe file as a post
+install step and rebuild the container:
 
 ```{python}
-#| eval: false
-launch_script = dedent(f"""
-#!/bin/bash
-#SBATCH --job-name=launch-{PROJECT_NAME}
-#SBATCH --time=08:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=24G
-#SBATCH --output={PROJECT_DIR}/sbatch/launch-%j.out
-#SBATCH --error={PROJECT_DIR}/sbatch/launch-%j.err
+from spython.main.parse.recipe import Recipe
+from spython.main.parse.writers import SingularityWriter
 
-set -euo pipefail
+recipe = Recipe()
 
-PROJECT_DIR="{PROJECT_DIR}"
-SIF="{PROJECT_DIR}/.devcontainer/{PROJECT_NAME.lower()}-amd64.sif"
-PORT="${{PORT:-8026}}"
+recipe.fromHeader = "spack/rockylinux8:develop"
 
-cd "$PROJECT_DIR"
+recipe.install = [
+    "set -eux",
+    "dnf install -y curl ca-certificates tar gzip",
+    """
+    mkdir -p /work /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache
+    
+    curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+    RV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+    
+    if [ -z "$RV_BIN" ]; then
+        RV_BIN="$(find / -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+    fi
 
-singularity exec \\
-    --no-home \\
-    --bind "$PROJECT_DIR:/work" \\
-    "$SIF" \\
-    bash --noprofile --norc -lc "
-        cd /work
-        . /opt/spack/share/spack/setup-env.sh || true
-        spack env activate -d . || true
-        code-server --bind-addr 0.0.0.0:$PORT /work
-    "
-""").lstrip()
-
-launch_path = SBATCH_DIR / "LAUNCH"
-launch_path.write_text(launch_script)
-launch_path.chmod(0o755)
-
-console.print(f"Wrote {launch_path}")
-```
-
-## 15. RSE developer affordances
-
-These are optional but useful when the project is containerised.
-
-### `zsh`
-
-The container should include `zsh`. The launch script can inherit lab/user shell configuration only if those paths are explicitly bound.
-
-```{python}
-#| eval: false
-show(run("grep -n 'zsh' .devcontainer/Singularity.def || true"))
-```
-
-### `code-server`
-
-`code-server` may be installed through Spack or by another scripted installer. If installed through Spack, keep it in `spack.yaml`.
-
-```{python}
-#| eval: false
-show(run("grep -n 'code-server' spack.yaml || true"))
-```
-
-### `arf`
-
-`arf` should be installed if this project needs an R frontend manager.
-
-```{python}
-#| eval: false
-show(run("""
-which arf || echo "TODO: install arf here once canonical install method is finalized"
-"""))
-```
-
-## 16. Project environment installation
-
-Once the system/container environment is available, install the project-level R/Python environment.
-
-```{python}
-#| eval: false
-show(run("""
-if test -f pyproject.toml; then
-    uv sync || true
-fi
-
-if test -f rproject.toml; then
-    rv status || true
-fi
-"""))
-```
-
-## 17. Final checklist
-
-The scaffold is complete when the following files exist in the project:
-
-```{python}
-#| eval: true
-expected_outputs = [
-    PROJECT_DIR / ".devcontainer" / "Singularity.def",
-    PROJECT_DIR / "spack.yaml",
-    PROJECT_DIR / "sbatch" / "BUILD",
-    PROJECT_DIR / "sbatch" / "LAUNCH",
+    test -n "$RV_BIN"
+    install -m 0755 "$RV_BIN" /usr/local/bin/rv
+    /usr/local/bin/rv --version
+    """,
 ]
 
-{str(path): path.exists() for path in expected_outputs}
+recipe.environ = [
+    "PATH=/root/.cargo/bin:/usr/cargo/bin:/usr/local/bin:/opt/views/view/bin:$PATH",
+    "SPACK_DISABLE_LOCAL_CONFIG=true",
+    "SPACK_USER_CONFIG_PATH=/tmp/spack-user-config",
+    "SPACK_USER_CACHE_PATH=/tmp/spack-user-cache",
+    "SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache"
+]
+
+recipe.test = [
+    "echo $PATH",
+    "rv --version",
+]
+
+writer = SingularityWriter({"spython-base": recipe})
+definition = writer.convert()
+
+print(definition)
 ```
 
-Recommended next commands:
+Now, we write that to file and rebuild the container:
 
-```bash
-sbatch sbatch/BUILD
-sbatch sbatch/LAUNCH
+```{python}
+SINGULARITY_DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
+SINGULARITY_DEF.parent.mkdir(parents=True, exist_ok=True)
+with open(SINGULARITY_DEF, "w") as f:
+    f.write(definition)
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
 ```
 
-The workbench notebook can now be copied into the project as documentation of how the environment was scaffolded.
+And test:
+
+```{python}
+show_spython(
+    spython_exec(
+        "rv --version",
+        bind_project=True
+    )
+)
+```
+
+Now install R and see if rv will sync:
+
+```{python}
+show_spython(
+    spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d . &&
+spack concretize
+""", writable=True, bind_project=True
+    )
+)
+```
+
+```{python}
+show_spython(
+    spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d . &&
+spack install --deprecated --fail-fast -j12
+
+rv sync
+""", writable=True, bind_project=True
+    )
+)
+```
+
+No luck, but that's ok because it's due to the fact that our container
+is rudimentary. Let's add all the system level packages we predict we'll
+need and try again:
+
+```{python}
+recipe.install.append(
+    """
+    dnf install -y epel-release
+    dnf install -y cmake make which libcurl-devel openssl-devel git libX11-devel udunits2-devel abseil-cpp-devel libxml2-devel libicu-devel fontconfig-devel freetype-devel cairo-devel libpng-devel libtiff-devel sqlite-devel fribidi-devel harfbuzz-devel libedit
+    """
+)
+
+with open(SINGULARITY_DEF, "w") as f:
+    writer = SingularityWriter({"spython-base": recipe})
+    definition = writer.convert()
+    f.write(definition)
+```
+
+```{python}
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+Success! Now, let's try to install R and sync rv again:
+
+```{python}
+SPACK_YAML = """
+spack:
+  specs:
+  - r@4.4.3
+  - zlib-ng
+  - libiconv
+  - openblas
+  - libedit@3.1-20150325
+  - curl
+  - openssl
+  - pkgconf
+  - abseil-cpp
+  - proj@9.4.1
+  - geos
+  - gdal@3.9.3~arrow
+  - code-server
+  - ncurses
+  - python@3.14
+
+  view: /work/.spack-env/view
+
+  config:
+    install_tree:
+      root: /work/.spack-env/install
+    source_cache: /work/.spack/cache/source
+    misc_cache: /work/.spack/cache/misc
+    build_stage:
+    - /work/.spack/stage
+"""
+with open(PROJECT_DIR / "spack.yaml", "w") as f:
+    f.write(SPACK_YAML)
+```
+
+```{python}
+show_spython(
+    spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+export LD_LIBRARY_PATH="/work/.spack-env/view/lib:/work/.spack-env/view/lib64:${LD_LIBRARY_PATH:-}"
+
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d . &&
+spack concretize &&
+spack install --deprecated --fail-fast -j12 --no-checksum
+""", writable=True, bind_project=True
+    )
+)
+```
+
+```{python}
+pkgs = " ".join([
+    "box", 
+    "DT", 
+    "forcats", 
+    "gh",
+    "gitcreds",
+    "haven",
+    "jsonlite", 
+    "rdhs",
+    "readxl",
+    "remotes",
+    "rprojroot",
+    "stringi",
+    "tarchetypes",
+    "usethis", 
+    "httpgd",
+    "sf",
+    "parsermd",
+    "rmarkdown",
+    "skimr",
+    "nanoparquet",
+    "DiagrammeR",
+    "svglite",
+    "later",
+    "rstudioapi"
+    ])
+show_spython(
+    spython_exec(f"""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d .
+rv add --no-sync --git https://github.com/REditorSupport/vscode-R --subdir sess --branch master sess
+rv add {pkgs}
+rv summary
+""", writable=True, bind_project=True
+    )
+)
+```
+
+We can actually write this outside of the container directly to the `rproject.toml` 
+file, which is what `rv` uses to manage the R packages and VSCode extensions. This 
+will allow us to have a reproducible environment for the project.
+
+```{python}
+from pathlib import Path
+import tomli_w
+
+PROJECT_DIR = Path("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors/prospectorDHSNepal")
+RPROJECT_TOML = PROJECT_DIR / "rproject.toml"
+
+pkgs = [
+    "box",
+    "DT",
+    "forcats",
+    "gh",
+    "gitcreds",
+    "haven",
+    "jsonlite",
+    "rdhs",
+    "readxl",
+    "remotes",
+    "rprojroot",
+    "stringi",
+    "tarchetypes",
+    "usethis",
+    "httpgd",
+    "sf",
+    "parsermd",
+    "rmarkdown",
+    "skimr",
+    "nanoparquet",
+    "DiagrammeR",
+    "svglite",
+    "later",
+    "rstudioapi",
+]
+
+custom_pkgs = [
+    {
+        "name": "sess",
+        "git": "https://github.com/REditorSupport/vscode-R",
+        "branch": "master",
+        "directory": "sess",
+    }
+]
+
+rproject = {
+    "project": {
+        "name": "prospectorDHSNepal",
+        "r_version": "4.4",
+        "repositories": [
+            {
+                "alias": "PPM",
+                "url": "https://packagemanager.posit.co/cran/latest",
+            }
+        ],
+        "dependencies": pkgs + custom_pkgs,
+    }
+}
+
+RPROJECT_TOML.write_text(tomli_w.dumps(rproject))
+```
+
+Great, that worked! Now we can add a test for `code-server`, and our `arf` console to the container
+and we should be good to go.
+
+```{python}
+recipe.install.append(
+    """
+    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/eitsupi/arf/releases/latest/download/arf-console-installer.sh | sh
+
+    ARF_BIN="$(find /root/.cargo/bin /home -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+    if [ -z "$ARF_BIN" ]; then
+        ARF_BIN="$(find / -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+    fi
+
+    test -n "$ARF_BIN"
+    install -m 0755 "$ARF_BIN" /usr/local/bin/arf
+    /usr/local/bin/arf --version
+    """
+)
+
+writer = SingularityWriter({"spython-base": recipe})
+definition = writer.convert()
+
+with open(SINGULARITY_DEF, "w") as f:
+    writer = SingularityWriter({"spython-base": recipe})
+    definition = writer.convert()
+    f.write(definition)
+```
+
+
+```{python}
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+```{python}
+show_spython(
+    spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d . &&
+spack concretize &&
+spack install --deprecated --fail-fast -j12 --no-checksum
+""", writable=True, bind_project=True
+    )
+)
+```
+
+```{python}
+show_spython(
+    spython_exec("""
+export SPACK_DISABLE_LOCAL_CONFIG=true
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+spack env activate -d . &&
+echo $PATH
+echo "Sitrep:"
+
+echo "Vscode:" $(which code-server)
+echo "R:" $(which R)
+echo "Python:" $(which python)
+echo "rv:" $(which rv)
+echo "Arf:" $(which arf)
+
+""", writable=True, bind_project=True
+    )
+)
+```
+
+This should be good to go. Now we write out the final Singularity definition file
+and send out the build command to the cluster. 
+
+## Final Output
+
+Here's the final build command to run on the cluster, including some help
+from `submitit` to manage the job submission. This will build the final definition
+file and container and place them in the project directory.
+
+Libraries and definitions:
+
+```{python}
+from pyprojroot import here
+from pathlib import Path
+from spython.main.parse.recipe import Recipe
+from spython.main.parse.writers import SingularityWriter
+from spython.main import Client
+import submitit
+
+SINGULARITY_DEF =  PROJECT_DIR / ".devcontainer/Singularity.def"
+SINGULARITY_SIF = PROJECT_DIR / ".devcontainer/Singularity.sif"
+```
+
+
+```{python}
+recipe = Recipe()
+recipe.fromHeader = "spack/rockylinux8:develop"
+
+recipe.install = [
+    "set -eux",
+    "dnf install -y curl ca-certificates tar gzip",
+    "dnf install -y epel-release",
+
+    "dnf install -y cmake make which libcurl-devel openssl-devel git libX11-devel udunits2-devel abseil-cpp-devel libxml2-devel libicu-devel fontconfig-devel freetype-devel cairo-devel libpng-devel libtiff-devel sqlite-devel fribidi-devel harfbuzz-devel libedit",
+    "dnf install -y cmake make which libcurl-devel openssl-devel git libX11-devel abseil-cpp-devel udunits2-devel libxml2-devel libicu-devel fontconfig-devel freetype-devel cairo-devel libpng-devel libtiff-devel sqlite-devel fribidi-devel harfbuzz-devel"
+    
+    "mkdir -p /work /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache",
+    
+    """
+    curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+    RV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+    RV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+    if [ -z "$RV_BIN" ]; then
+        RV_BIN="$(find / -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+    fi
+    test -n "$RV_BIN"
+    install -m 0755 "$RV_BIN" /usr/local/bin/rv
+    /usr/local/bin/rv --version
+    """,
+
+    """
+    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/eitsupi/arf/releases/latest/download/arf-console-installer.sh | sh
+    ARF_BIN="$(find /root/.cargo/bin /home -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+    if [ -z "$ARF_BIN" ]; then
+        ARF_BIN="$(find / -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+    fi
+    test -n "$ARF_BIN"
+    install -m 0755 "$ARF_BIN" /usr/local/bin/arf
+    /usr/local/bin/arf --version
+    """
+    
+]
+```
+
+```{python}
+recipe.environ = [
+    "PATH=/usr/local/bin:/opt/views/view/bin:/root/.cargo/bin:/usr/cargo/bin:$PATH",
+    "SPACK_DISABLE_LOCAL_CONFIG=true",
+    "SPACK_USER_CONFIG_PATH=/tmp/spack-user-config",
+    "SPACK_USER_CACHE_PATH=/tmp/spack-user-cache",
+    "SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache",
+]
+```
+
+```{python}
+# recipe.test = [
+#     "echo $PATH",
+#     "rv --version",
+#     "which arf || true",
+#     "which R || true",
+#     "which python || true",
+#     "which code-server || true",
+# ]
+```
+
+```{python}
+writer = SingularityWriter({"spython-base": recipe})
+definition = writer.convert()
+
+with open(SINGULARITY_DEF, "w") as f:
+    writer = SingularityWriter({"spython-base": recipe})
+    definition = writer.convert()
+    f.write(definition)
+```
+
+```{python}
+import submitit
+
+SUBMITIT_DIR = PROJECT_DIR / "slurm" / "submitit"
+SUBMITIT_DIR.mkdir(parents=True, exist_ok=True)
+
+n_cpus = 12
+
+executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+
+executor.update_parameters(
+    timeout_min=360,
+    slurm_partition="hsph",
+    mem_gb=32.0,
+    cpus_per_task=n_cpus,
+    slurm_job_name=f"build-{PROJECT_NAME}-container"
+)
+```
+
+```{python}
+def build_container():
+    from spython.main import Client
+
+    return Client.build(
+        image=str(SINGULARITY_SIF),
+        recipe=str(SINGULARITY_DEF),
+        options=["--fakeroot", "--force"],
+        sudo=False,
+    )
+
+job = executor.submit(build_container)
+job.job_id
+```
+
+At runtime, we'll need to bind the directory
+into the container and run:
+
+```{python}
+    """
+    export SPACK_DISABLE_LOCAL_CONFIG=true
+
+    . /opt/spack/share/spack/setup-env.sh &&
+    cd /work &&
+    spack env activate -d . &&
+    spack concretize &&
+    spack install --deprecated --fail-fast -j12 --no-checksum
+    """
+```
+

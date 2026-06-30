@@ -1,10 +1,9 @@
 #!/bin/bash
 #SBATCH -p hsph
-#SBATCH --mem=24g
-#SBATCH --time=04:00:00
-#SBATCH -c 4
+#SBATCH --mem=100g
+#SBATCH --time=012:00:00
+#SBATCH -c 12
 #SBATCH --job-name=RSEWorkBench
-# Logging
 #SBATCH --output=/n/holylabs/LABS/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench/slurm/launch/logs/launch_%j.out
 #SBATCH --error=/n/holylabs/LABS/cgolden_lab/Lab/frontier/town/tinashe/rse-workbench/slurm/launch/logs/launch_%j.err
 

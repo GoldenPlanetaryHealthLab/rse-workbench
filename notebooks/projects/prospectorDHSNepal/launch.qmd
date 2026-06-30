@@ -1,0 +1,221 @@
+---
+title: "Launch VSCode"
+format: gfm
+---
+
+This is a simple notebook to launch the VSCode server on the 
+cluster. It will build a singularity container with all the 
+dependencies and launch the server.
+
+```{python}
+from pathlib import Path
+import os
+import subprocess
+import tomllib
+import tomli_w
+import yaml
+from rich.console import Console
+from rich.panel import Panel
+from rich.columns import Columns
+from rich.syntax import Syntax
+
+from spython.main import Client
+from spython.main.parse.recipe import Recipe
+from spython.main.parse.writers import SingularityWriter
+
+console = Console()
+```
+
+```{python}
+def spython_exec(
+    command,
+    *,
+    image,
+    writable=False,
+    fakeroot=False,
+    bind_project=False,
+):
+    options = ["--no-home"]
+
+    if writable:
+        options.append("--writable")
+
+    if fakeroot:
+        options.append("--fakeroot")
+
+    if bind_project:
+        options += ["--bind", f"{PROJECT_DIR}:/work"]
+
+    return Client.execute(
+        image=str(image),
+        command=["bash", "--noprofile", "--norc", "-c", command],
+        options=options,
+        sudo=False,
+        return_result=True,
+    )
+
+
+def normalize_spython_result(result):
+    message = result.get("message", "")
+    return_code = result.get("return_code", None)
+
+    if isinstance(message, list):
+        stdout = message[0] if len(message) > 0 else ""
+        stderr = message[1] if len(message) > 1 else ""
+    else:
+        stdout = message or ""
+        stderr = ""
+
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "return_code": return_code,
+        "raw": result,
+    }
+
+
+def show_spython(result, *, tail=None):
+    result = normalize_spython_result(result)
+
+    stdout = result["stdout"]
+    stderr = result["stderr"]
+
+    if tail:
+        stdout = "\n".join(stdout.splitlines()[-tail:])
+        stderr = "\n".join(stderr.splitlines()[-tail:])
+
+    console.print(
+        Panel(
+            Columns([
+                Panel(Syntax(stdout or "<empty>", "text"), title="stdout / message", border_style="green"),
+                Panel(Syntax(stderr or "<empty>", "text"), title="stderr", border_style="red" if result["return_code"] else "yellow"),
+            ]),
+            title=f"Exit code: {result['return_code']}",
+            border_style="green" if result["return_code"] == 0 else "red",
+        )
+    )
+
+    return result
+```
+
+To first _provision_ the container, we take the build image from `setup.qmd` 
+and install the spack stack. This will take a few minutes to complete.
+
+```{python}
+import submitit
+from pathlib import Path
+
+PROJECT_NAME = "prospectorDHSNepal"
+
+PROJECT_DIR = Path("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors") / PROJECT_NAME
+
+SINGULRITY_DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
+SINGULARITY_SIF = PROJECT_DIR / ".devcontainer" / "Singularity.sif"
+
+SUBMITIT_DIR = PROJECT_DIR / "slurm" / "submitit"
+SUBMITIT_DIR.mkdir(parents=True, exist_ok=True)
+
+n_cpus = 12
+hours = 4
+mem = {
+    "big": 32.,
+    "medium": 16.,
+    "small": 8.
+}
+
+executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+
+executor.update_parameters(
+    timeout_min=hours * 60,
+    slurm_partition="hsph",
+    mem_gb=mem["big"],
+    cpus_per_task=n_cpus,
+    slurm_job_name=f"launch-{PROJECT_NAME}-container"
+)
+
+runtime_command = [
+    "set -euo pipefail",
+    "export SPACK_DISABLE_LOCAL_CONFIG=true",
+    "export SPACK_USER_CONFIG_PATH=/work/.spack/user-config",
+    "export SPACK_USER_CACHE_PATH=/work/.spack/user-cache",
+    "export SPACK_MISC_CACHE_PATH=/work/.spack/misc-cache",
+    "export SPACK_SOURCE_CACHE=/work/.spack/source-cache",
+    'export LD_LIBRARY_PATH="/work/.spack-env/view/lib:/work/.spack-env/view/lib64:${LD_LIBRARY_PATH:-}"',
+    "export S2_FORCE_BUNDLED_ABSEIL=1",
+    "mkdir -p /work /work/.spack/user-config /work/.spack/user-cache /work/.spack/misc-cache /work/.spack/source-cache",
+    ". /opt/spack/share/spack/setup-env.sh",
+    "cd /work",
+    "spack env activate -d .",
+    "spack concretize",
+    "spack install --deprecated --fail-fast -j12 --no-checksum",
+    "rv sync || true",
+]
+runtime_command
+
+```
+
+```{python}
+show_spython(spython_exec("cd /work && . /opt/spack/share/spack/setup-env.sh && spack env activate -d . && spack install && spack env st", image=SINGULARITY_SIF, bind_project=True))
+```
+
+```{python}
+def launch_container():
+    # show_spython doesn't work here because
+    # submitit pickles the stdout and stderr
+    result=spython_exec(
+        " && ".join(runtime_command),
+        image=SINGULARITY_SIF,
+        bind_project=True,
+    )
+    return result
+
+job = executor.submit(launch_container)
+job.job_id
+```
+
+Pretty print is in the `job.results()`:
+
+```{python}
+job_results = job.results().pop()
+```
+
+```{python}
+show_spython(job_results)
+```
+
+With that, the project should have the spack stack installed in
+the _project space_ under `PROJECT_DIR/.spack`, which in the container
+is `/work/.spack`. You can now launch the VSCode server by running the `launch_container` function in a new notebook cell.
+
+```{python}
+runtime_command.append(
+    "code-server --bind-addr 0.0.0.0:${PORT:-8026} /work"
+)
+
+hours = 4
+n_cpus = 12
+
+executor.update_parameters(
+    timeout_min=hours * 60,
+    slurm_partition="hsph",
+    mem_gb=mem["big"],
+    cpus_per_task=n_cpus,
+    slurm_job_name=f"launch-{PROJECT_NAME}-container"
+)
+
+# now explicitly require runtime command so that it updates
+def launch_container(runtime_commands=runtime_command):
+    # show_spython doesn't work here because
+    # submitit pickles the stdout and stderr
+    result=spython_exec(
+        " && ".join(runtime_commands),
+        image=SINGULARITY_SIF,
+        bind_project=True,
+    )
+    return result
+
+job = executor.submit(launch_container, runtime_command)
+job.job_id
+
+```
+
