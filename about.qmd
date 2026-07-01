@@ -3,3 +3,7 @@ title: "About"
 ---
 
 About this site
+
+## 11. Keep pytask in view
+
+A future version of this notebook can export selected chunks into a `pytask` DAG. For now, the notebook remains the narrated construction record, and the exported project files are the reproducible boundary.

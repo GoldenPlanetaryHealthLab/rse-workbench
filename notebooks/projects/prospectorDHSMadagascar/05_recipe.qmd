@@ -1,0 +1,172 @@
+---
+title: "RSE Workbench Build Container"
+subtitle: "Project: TEMPLATE"
+format: gfm
+filters:
+  - sorting-hat
+  - ripper
+execute:
+  eval: false
+---
+
+This notebook records the steps taken to develop a reproducible platform container for this project.
+
+Here's how we create the singularity recipe for the platform container. 
+We start with a base image, and then add the dependencies we need for the project.
+Because we used `spython` to build the container, we can use the `Recipe` class to construct the recipe in Python, and then export it to a Singularity definition file.
+
+By defining all of our elements in Python, we can inspect, mutate,
+and compose them in the notebook to our heart's content:
+
+```{python}
+# for interacting with a singularity image
+from spython.main import Client
+from spython.main.parse.recipe import Recipe
+from spython.main.parse.writers import SingularityWriter
+
+recipe = Recipe()
+recipe.fromHeader = BASE_IMAGE.replace("docker://", "")
+
+recipe.install = [
+    "set -eux",
+    "dnf install -y curl ca-certificates tar gzip file which",
+    "dnf install -y epel-release",
+    "dnf install -y git libicu-devel cmake make libxml2-devel libX11-devel libcurl-devel openssl-devel fontconfig-devel freetype-devel cairo-devel libpng-devel libtiff-devel fribidi-devel harfbuzz-devel udunits2-devel abseil-cpp-devel sqlite-devel",
+    "mkdir -p /work /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache",
+]
+
+recipe.environ = [
+    "PATH=/usr/local/bin:/opt/views/view/bin:/root/.cargo/bin:/usr/cargo/bin:$PATH",
+]
+
+recipe.test = [
+    "echo $PATH",
+    "which spack",
+]
+```
+
+First, let's add the project dependencies by injecting the `arf_pkg` 
+recipe into the platform recipe. This will ensure that the project 
+dependencies are available in the platform container:
+
+```{python}
+recipe.install += arf_pkg.install_lines()
+```
+
+It's really that easy.
+
+Now, `uv` and `rv`:
+
+```{python}
+recipe.install += uv_pkg.install_lines()
+recipe.install += rv_pkg.install_lines()
+recipe.install += code_pkg.install_lines()
+```
+
+Add in the details we got from running `pak::pkg_sysreqs()` in the previous notebook. These are the system dependencies for the R packages we need:
+
+
+
+There are some spack configurations that we can add here too:
+
+```{python}
+recipe.install += [
+    """
+    mkdir -p /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache
+    export SPACK_DISABLE_LOCAL_CONFIG=true
+    export SPACK_USER_CONFIG_PATH=/tmp/spack-user-config
+    export SPACK_USER_CACHE_PATH=/tmp/spack-user-cache
+    export SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache
+    """
+]
+
+# add them both to install and to environment because they are necessary during build
+recipe.environ += [
+    "SPACK_DISABLE_LOCAL_CONFIG=true",
+    "SPACK_USER_CONFIG_PATH=/tmp/spack-user-config",
+    "SPACK_USER_CACHE_PATH=/tmp/spack-user-cache",
+    "SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache",
+]
+```
+
+Now, we export the recipe to the singularity definition file:
+
+```{python}
+#| eval: false
+writer = SingularityWriter({"spython-base": recipe})
+definition = writer.convert()
+print(definition)
+SINGULARITY_DEF.write_text(definition)
+```
+
+Rebuild the sandbox from the exported recipe
+
+```{python}
+#| eval: false
+res=Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+    return_result=True,
+    quiet=True
+)
+```
+
+Validate that it worked:
+
+```{python}
+#| eval: false
+show_spython(
+    spython_exec(
+        """
+        . /opt/spack/share/spack/setup-env.sh
+        
+        command -v rv
+        command -v uv
+        command -v arf
+        command -v code
+
+        rv --version
+        uv --version
+        arf --version
+        code --version
+        """,
+        image=str(TMP_SANDBOX),
+        writable=True,
+        bind_project=True,
+    )
+)
+```
+
+## 7. Install and validate project environment in the sandbox
+
+```{python}
+#| eval: false
+
+show_spython(
+    spython_exec(
+        """
+        . /opt/spack/share/spack/setup-env.sh
+        cd /work
+
+        spack env activate -d .
+        spack concretize
+        spack install --deprecated --fail-fast -j12 --no-checksum
+
+        rv sync || true
+        """,
+        image=str(TMP_SANDBOX),
+        writable=True,
+        bind_project=True,
+    )
+)
+```
+
+If package installation fails, inspect the error, add the missing system library to either:
+
+- `recipe.install`, if it is an OS-level build dependency
+- `spack_env["spack"]["specs"]`, if it should be managed by Spack
+- `rproject["project"]["dependencies"]`, if it is an R package
+
+Then write the files and retry.

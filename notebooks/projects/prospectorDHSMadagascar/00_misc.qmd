@@ -1,0 +1,219 @@
+---
+title: "Miscellaneous Functions"
+subtitle: "Project: DHS Madagascar"
+format: gfm
+filters:
+  - sorting-hat
+  - ripper
+execute:
+  eval: false
+---
+
+This notebook contains miscellaneous functions and helpers for managing the environment engineering workflow.
+
+```{python}
+#| sorting-hat: remove
+from pathlib import Path
+import os
+import subprocess
+
+# for reading/writing TOML and YAML
+import tomllib
+import tomli_w
+import yaml
+
+# for pretty in-notebook displays
+from rich.console import Console
+from rich.panel import Panel
+from rich.columns import Columns
+from rich.syntax import Syntax
+
+# for interacting with a singularity image
+from spython.main import Client
+from spython.main.parse.recipe import Recipe
+from spython.main.parse.writers import SingularityWriter
+
+console = Console()
+```
+
+These helpers make the notebook readable while we iterate.
+
+## General shell commands
+
+It became necessary to have some helpers for just throwing something at the
+shell, without having to rewrite subprocess.run() over and over.
+
+```{python}
+def shell(cmd, *, cwd=None):
+    return subprocess.run(
+        cmd,
+        shell=True,
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+    )
+
+
+def show_shell(result, *, tail=None):
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+
+    if tail:
+        stdout = "\n".join(stdout.splitlines()[-tail:])
+        stderr = "\n".join(stderr.splitlines()[-tail:])
+
+    console.print(
+        Panel(
+            Columns([
+                Panel(Syntax(stdout or "<empty>", "text"), title="stdout", border_style="green"),
+                Panel(Syntax(stderr or "<empty>", "text"), title="stderr", border_style="red" if result.returncode else "yellow"),
+            ]),
+            title=f"Exit code: {result.returncode}",
+            border_style="green" if result.returncode == 0 else "red",
+        )
+    )
+
+    return result
+```
+
+## Singularity commands through `spython`
+
+The `spython` library is basically a Singularity builder and executor. It's
+really useful for programmatically building and executing Singularity images,
+which is exactly what we were looking to do. The following helpers wrap 
+`spython` to make it easier to use in the notebook.
+
+```{python}
+def spython_exec(
+    command,
+    *,
+    image,
+    writable=False,
+    fakeroot=False,
+    bind_project=False,
+):
+    options = ["--no-home"]
+
+    if writable:
+        options.append("--writable")
+
+    if fakeroot:
+        options.append("--fakeroot")
+
+    if bind_project:
+        options += ["--bind", f"{PROJECT_DIR}:/work"]
+
+    return Client.execute(
+        image=str(image),
+        command=["bash", "--noprofile", "--norc", "-c", command],
+        options=options,
+        sudo=False,
+        return_result=True,
+    )
+
+
+def normalize_spython_result(result):
+    message = result.get("message", "")
+    return_code = result.get("return_code", None)
+
+    if isinstance(message, list):
+        stdout = message[0] if len(message) > 0 else ""
+        stderr = message[1] if len(message) > 1 else ""
+    else:
+        stdout = message or ""
+        stderr = ""
+
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "return_code": return_code,
+        "raw": result,
+    }
+
+
+def show_spython(result, *, tail=None):
+    result = normalize_spython_result(result)
+
+    stdout = result["stdout"]
+    stderr = result["stderr"]
+
+    if tail:
+        stdout = "\n".join(stdout.splitlines()[-tail:])
+        stderr = "\n".join(stderr.splitlines()[-tail:])
+
+    console.print(
+        Panel(
+            Columns([
+                Panel(Syntax(stdout or "<empty>", "text"), title="stdout / message", border_style="green"),
+                Panel(Syntax(stderr or "<empty>", "text"), title="stderr", border_style="red" if result["return_code"] else "yellow"),
+            ]),
+            title=f"Exit code: {result['return_code']}",
+            border_style="green" if result["return_code"] == 0 else "red",
+        )
+    )
+
+    return result
+```
+
+## Slurm jobs through `submitit`
+
+After having built the machinery for building the image, it became apparent
+that we would want to submit SLURM jobs, but not entirely leave
+the interface of the interactive window in VSCode. Usually, when I'm
+running a lot of SLURM, I'll just do it from the terminal, but in
+this case it made sense to have a place right next to my interactive
+window to quickly call `sbatch`es... Enter: `submitit`
+
+Like the `spython` library, `submitit` is a Python library that 
+wraps SLURM job submission and management. It makes it easy to 
+submit jobs and check their status from within a Python environment.
+
+```{python}
+def show_submitit_job(job, *, tail=80):
+    console.print(
+        Panel.fit(
+            f"Job ID: {job.job_id}\n"
+            f"Done: {job.done()}\n"
+            f"Paths: {getattr(job, 'paths', '<unavailable>')}",
+            title="submitit job",
+        )
+    )
+
+    if job.done():
+        try:
+            result = job.result()
+            console.print(Panel(str(result), title="result", border_style="green"))
+            return result
+        except Exception as exc:
+            console.print(Panel(str(exc), title="exception", border_style="red"))
+            raise
+    else:
+        console.print(Panel("Job is not done yet.", title="status", border_style="yellow"))
+        return None
+```
+
+## An Installable `dataclass`
+
+We're implementing a simple `dataclass` for platform-installable elements.
+This will make it easy for us to add/remove elements from the platform 
+image without having to rewrite the whole recipe several times over.
+
+```{python}
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+@dataclass
+class Installable:
+    name: str
+    kind: str  # "dnf", "binary", "spack", "cargo", "script"
+    commands: list[str]
+    path: Optional[str] = None
+    test: list[str] = field(default_factory=list)
+
+    def install_lines(self) -> list[str]:
+        return self.commands
+
+    def test_lines(self) -> list[str]:
+        return self.test
+```
+
