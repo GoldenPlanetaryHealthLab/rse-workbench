@@ -1,6 +1,6 @@
 ---
 title: "Data Science Language: Pick Your Poison"
-subtitle: "Project: TEMPLATE"
+subtitle: "Project: prospectorMAHERY"
 format: gfm
 filters:
   - sorting-hat
@@ -52,7 +52,7 @@ Yes, it's built in rust...
 
 ```{python}
 RPROJECT_TOML = PROJECT_DIR / "rproject.toml"
-R_VER="4.4.3"
+R_VER="4.5.1"
 PY_VER="3.14"
 ```
 
@@ -84,6 +84,39 @@ custom_rpkgs = [
         "branch": "master",
         "directory": "sess",
     }
+]
+
+rpkgs += [
+    "dplyr",
+    "languageserver",
+    "httpgd",
+    "usethis",
+    "here",
+    "rmarkdown",
+    "fusen",
+    "remotes",
+    "fledge",
+    "readr",
+    "stringr",
+    "withr",
+    "readxl",
+    "skimr",
+    "httpuv",
+    "tidyverse",
+    "websocket",
+    "targets",
+    "tarchetypes",
+     "parsermd",
+    "codetools",
+    "quarto",
+    "rlang",
+    "purrr",
+    "tibble",
+    "devtools",
+    "later",
+    "jsonlite",
+    "rstudioapi",
+    "svglite"
 ]
 
 
@@ -148,15 +181,14 @@ a handy function for this:
 print(
     f"""
     pkgs <- toml::parse_toml(readLines("{PROJECT_DIR}/rproject.toml"))$project$dependencies
-    pkgs[[length(pkgs)]] <- NULL
     pak::pkg_sysreqs(unlist(pkgs), sysreqs_platform = "rockylinux")
     """
 )
+
 ```
 
 Take note of the output, as it will be used to install system 
-dependencies in the platform container recipe. A good strategy is
-to transfer _most_ of these to the spack spec.
+dependencies in the platform container recipe.
 
 We record the package managers:
 

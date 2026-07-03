@@ -1,9 +1,29 @@
 ---
-title: "About"
+title: "About the Workbench Projects"
 ---
 
-About this site
+This repository catalogs project-specific RSE Workbench folders generated from the shared templates.
 
-## 11. Keep pytask in view
+Each project folder is a narrated environment-building workspace. The notebooks document the reasoning, experiments, failures, fixes, and final decisions used to define the project runtime environment.
 
-A future version of this notebook can export selected chunks into a `pytask` DAG. For now, the notebook remains the narrated construction record, and the exported project files are the reproducible boundary.
+## Projects Scaffolded with this Workbench
+
+[`prospectorDHSNepal`]()
+
+[`prospectorDHSMadagascar`]()
+
+[`prospectorMahery`]()
+
+## Future Directions
+
+### `blacksmith`
+
+`blacksmith` is a conceptual tool that may wrap up the project
+scaffolding process. It may eventually pull from this repository to populate new 
+project workbenches.
+
+## `pytask`
+
+A future version of this notebook strategy may export selected chunks into a `pytask` DAG. This might help us manage state.
+For now, the notebook remains the narrated construction record, and the exported 
+project files are the reproducible boundary.

@@ -1,0 +1,324 @@
+---
+title: "Launch VSCode"
+format: gfm
+---
+
+This is a simple notebook to launch the VSCode server on the 
+cluster. It will build a singularity container with all the 
+dependencies and launch the server.
+
+## 9. Build final SIF with submitit
+
+```{python}
+#| eval: false
+import submitit
+
+n_cpus = 12
+
+executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+
+executor.update_parameters(
+    timeout_min=360,
+    slurm_partition="hsph",
+    mem_gb=32.0,
+    cpus_per_task=n_cpus,
+    slurm_job_name=f"build-{PROJECT_NAME}-container",
+)
+```
+
+```{python}
+#| eval: false
+def build_container(singularity_def=SINGULARITY_DEF, singularity_sif=SINGULARITY_SIF):
+    from spython.main import Client
+    from pathlib import Path
+    import os
+
+    job_id = os.environ.get("SLURM_JOB_ID", "local")
+    user = os.environ["USER"]
+
+    tmp_root = Path(f"/tmp/{user}-rse-workbench-{job_id}")
+    singularity_tmp = tmp_root / "singularity-tmp"
+    singularity_cache = tmp_root / "singularity-cache"
+
+    singularity_tmp.mkdir(parents=True, exist_ok=True)
+    singularity_cache.mkdir(parents=True, exist_ok=True)
+
+    os.environ["SINGULARITY_TMPDIR"] = str(singularity_tmp)
+    os.environ["SINGULARITY_CACHEDIR"] = str(singularity_cache)
+    os.environ["APPTAINER_TMPDIR"] = str(singularity_tmp)
+    os.environ["APPTAINER_CACHEDIR"] = str(singularity_cache)
+
+    return Client.build(
+        image=str(singularity_sif),
+        recipe=str(singularity_def),
+        options=[
+            "--fakeroot", "--force"
+            ],
+        sudo=False,
+        return_result=True,
+    )
+```
+
+Patch placeholders before submission.
+
+```{python}
+#| eval: false
+
+job = executor.submit(build_container)
+job.job_id
+```
+
+```{python}
+#| eval: false
+show_submitit_job(job)
+```
+
+Here are some preparatory steps for building:
+
+```{python}
+from pathlib import Path
+import os
+
+
+def prepare_singularity_runtime(project_dir: Path):
+    job_id = os.environ.get("SLURM_JOB_ID", "local")
+    user = os.environ["USER"]
+
+    tmp_root = Path(f"/tmp/{user}-rse-workbench-{job_id}")
+
+    singularity_tmp = tmp_root / "singularity-tmp"
+    singularity_cache = tmp_root / "singularity-cache"
+    container_home = project_dir / ".container-home"
+
+    for p in (singularity_tmp, singularity_cache, container_home):
+        p.mkdir(parents=True, exist_ok=True)
+
+    os.environ.update({
+        "SINGULARITY_TMPDIR": str(singularity_tmp),
+        "SINGULARITY_CACHEDIR": str(singularity_cache),
+        "APPTAINER_TMPDIR": str(singularity_tmp),
+        "APPTAINER_CACHEDIR": str(singularity_cache),
+
+        # forwarded into the container
+        "SINGULARITYENV_HOME": "/home/rse",
+        "SINGULARITYENV_XDG_CACHE_HOME": "/home/rse/.cache",
+        "SINGULARITYENV_XDG_CONFIG_HOME": "/home/rse/.config",
+        "SINGULARITYENV_XDG_DATA_HOME": "/home/rse/.local/share",
+
+        "SINGULARITYENV_R_LIBS": "",
+        "SINGULARITYENV_R_LIBS_USER": "",
+        "SINGULARITYENV_R_LIBS_SITE": "",
+
+        "SINGULARITYENV_SPACK_DISABLE_LOCAL_CONFIG": "true",
+    })
+
+    return [
+        "--cleanenv",
+        "--containall",
+        "--home", f"{container_home}:/home/rse",
+        "--bind", f"{project_dir}:/work",
+    ]
+```
+
+```{python}
+def install_in_container():
+    from spython.main import Client
+    from pathlib import Path
+    import os
+
+    project_dir = Path(PROJECT_DIR)
+    singularity_sif = Path(SINGULARITY_SIF)
+
+    job_id = os.environ.get("SLURM_JOB_ID", "local")
+    user = os.environ["USER"]
+
+    tmp_root = Path(f"/tmp/{user}-rse-workbench-{job_id}")
+    singularity_tmp = tmp_root / "singularity-tmp"
+    singularity_cache = tmp_root / "singularity-cache"
+    container_home = project_dir / ".container-home"
+
+    for path in [singularity_tmp, singularity_cache, container_home]:
+        path.mkdir(parents=True, exist_ok=True)
+
+    # Host-side Singularity/Apptainer runtime locations.
+    os.environ.update({
+        "SINGULARITY_TMPDIR": str(singularity_tmp),
+        "SINGULARITY_CACHEDIR": str(singularity_cache),
+        "APPTAINER_TMPDIR": str(singularity_tmp),
+        "APPTAINER_CACHEDIR": str(singularity_cache),
+
+        "SINGULARITYENV_XDG_CACHE_HOME": "/home/rse/.cache",
+        "SINGULARITYENV_XDG_CONFIG_HOME": "/home/rse/.config",
+        "SINGULARITYENV_XDG_DATA_HOME": "/home/rse/.local/share",
+
+        "SINGULARITYENV_R_LIBS": "",
+        "SINGULARITYENV_R_LIBS_USER": "",
+        "SINGULARITYENV_R_LIBS_SITE": "",
+        "SINGULARITYENV_SPACK_DISABLE_LOCAL_CONFIG": "true",
+    })
+
+    options = [
+        "--cleanenv",
+        "--containall",
+        "--home", f"{container_home}:/home/rse",
+        "--bind", f"{project_dir}:/work",
+    ]
+    runtime_command = """
+set -euo pipefail
+
+export TMPDIR=/work/.spack/tmp
+mkdir -p "$TMPDIR"
+
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+
+spack env activate -d .
+spack concretize
+spack install --deprecated --fail-fast -j12 --no-checksum
+
+rv sync || true
+"""
+
+    result = Client.execute(
+        image=str(singularity_sif),
+        command=[
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-lc",
+            runtime_command,
+        ],
+        options=options,
+        sudo=False,
+        return_result=True,
+    )
+
+    return result
+```
+
+```{python}
+#| eval: false
+
+job = executor.submit(install_in_container)
+job.job_id
+```
+
+```{python}
+#| eval: false
+show_submitit_job(job)
+```
+
+## 10. Runtime command
+
+The SIF is read-only. Do not launch it with `--writable`.
+
+At runtime, bind the project into `/work`, activate the project Spack environment, install/update project dependencies as needed, and then launch `code-server` or run the pipeline.
+
+```{python}
+runtime_command = [
+    "export SPACK_DISABLE_LOCAL_CONFIG=true",
+    ". /opt/spack/share/spack/setup-env.sh",
+    "cd /work",
+    "spack env activate -d .",
+    "spack concretize",
+    "spack install --deprecated --fail-fast -j12 --no-checksum",
+    "rv sync || true",
+    f"code tunnel --accept-server-license-terms --name {PROJECT_NAME}-vscode /work",
+]
+runtime_command
+```
+
+A launch script can be generated later from this list, or executed through a Python/Slurm interface. The important runtime contract is:
+
+```bash
+singularity exec \
+  --no-home \
+  --bind "$PROJECT_DIR:/work" \
+  "$SINGULARITY_SIF" \
+  bash --noprofile --norc -lc '<runtime command>'
+```
+
+Let's see if we can write the runtime command to our
+project-local `launch.sh` script. We'll use `simple_slurm`
+for this. First, set the job params:
+
+```{python}
+from simple_slurm import Slurm
+
+mem = {
+    "small": "4G",
+    "medium": "8G",
+    "big": "32G",
+}
+
+n_hours = 6
+n_cpus = 12
+
+slurm = Slurm(
+    job_name=f"launch-{PROJECT_NAME}-container", 
+    cpus_per_task=n_cpus, 
+    mem=mem["big"], 
+    time=f"0{n_hours}:00:00", 
+    partition="hsph",
+    mail_user="aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com",
+    output=str(PROJECT_DIR / "slurm" / "launch" / "logs" / "launch-%j.out"),
+    error=str(PROJECT_DIR / "slurm" / "launch" / "logs" / "launch-%j.err")
+)
+
+print(slurm)
+
+slurm.add_cmd("set -o errexit -o nounset -o pipefail")
+```
+
+Next, set the project level variabless
+
+```{python}
+slurm.add_cmd(f"PROJECT_DIR=${{PROJECT_DIR}}")
+slurm.add_cmd(f"SIF=${{PROJECT_DIR}}/.devcontainer/Singularity.sif")
+slurm.add_cmd(f"CONTAINER_HOME=${{PROJECT_DIR}}/.container-home")
+
+slurm.add_cmd(f"mkdir -p ${{PROJECT_DIR}}/slurm/launch/logs")
+slurm.add_cmd(f"mkdir -p ${{CONTAINER_HOME}}")
+
+slurm.add_cmd(f"cd ${{PROJECT_DIR}}")
+```
+
+Next, add some logging to the launch script:
+
+```{python}
+slurm.add_cmd("""
+cho "================ Slurm tunnel test ================"
+echo "Date:         $(date)"
+echo "Host:         $(hostname)"
+echo "User:         $(whoami)"
+echo "Job ID:       ${SLURM_JOB_ID}"
+echo "Project:      ${PROJECT_DIR}"
+echo "SIF:          ${SIF}"
+echo "Home:         ${CONTAINER_HOME}"
+echo "Tunnel:       ${TUNNEL_NAME}"
+echo "==================================================="
+
+module purge
+""")
+```
+
+Finally, the runtime command:
+
+```{python}
+slurm.add_cmd(r"singularity exec --no-home --bind ${PROJECT_DIR}:/work ${SIF} bash --noprofile --norc -lc '" + " && ".join(runtime_command) + "'")
+```
+
+And we write this to file:
+
+```{python}
+LAUNCH_SCRIPT = PROJECT_DIR / "slurm" / "launch" / "launch_container.sh"
+with open(LAUNCH_SCRIPT, "w") as f:
+    script = slurm.script(shell="bash")
+    f.write(script)
+    
+LAUNCH_SCRIPT.chmod(0o755)
+```
+
+```{python}
+Path(LAUNCH_SCRIPT).exists()
+```

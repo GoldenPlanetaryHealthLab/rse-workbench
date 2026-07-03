@@ -1,6 +1,6 @@
 ---
 title: "RSE Workbench Build Container"
-subtitle: "Project: TEMPLATE"
+subtitle: "Project: prospectorMAHERY"
 format: gfm
 filters:
   - sorting-hat
@@ -29,7 +29,7 @@ recipe.fromHeader = BASE_IMAGE.replace("docker://", "")
 
 recipe.install = [
     "set -eux",
-    "dnf install -y curl ca-certificates tar gzip",
+    "dnf install -y curl ca-certificates tar gzip which",
     "dnf install -y epel-release",
     
 ]
@@ -72,7 +72,7 @@ print(definition)
 SINGULARITY_DEF.write_text(definition)
 ```
 
-Rebuild the sandbox from the exported recipe
+Rebuild the sandbox from the exported recipe:
 
 ```{python}
 #| eval: false
@@ -97,6 +97,7 @@ show_spython(
         rv --version
         arf --version
         """,
+        image=str(TMP_SANDBOX),
         writable=True,
         bind_project=True,
     )

@@ -1,6 +1,6 @@
 ---
 title: "Devtools: Making Programming Easier"
-subtitle: "Project: TEMPLATE"
+subtitle: "Project: prospectorMAHERY"
 format: gfm
 filters:
   - sorting-hat

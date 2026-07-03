@@ -1,7 +1,26 @@
 ---
-title: "RSE Workbench"
+title: "RSE Workbench Templates"
 ---
 
-This is a Quarto website.
+This repository contains reusable RSE Workbench templates for building project-specific research computing environments.
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+The workbench is an environment-scaffolding studio. It is not the final runtime owner and it is separate from `blacksmith`. The intended pattern is:
+
+1. Start from the shared notebook templates in `notebooks/templates/`.
+2. Populate a project-specific workbench folder under `notebooks/projects/<project-name>/`.
+3. Use the notebooks to narrate, inspect, iterate, and export environment definitions.
+4. Write final runtime files back to the project repository.
+5. Use project-local build, launch, and run interfaces to execute the environment on the cluster.
+
+The templates support a staged workflow:
+
+- `00_misc.qmd`: shared helpers and conventions
+- `01_base_platform.qmd`: base Singularity / Apptainer platform image exploration
+- `02_spack.qmd`: system and compiled dependencies
+- `03_datascience_lang.qmd`: R and Python project environments
+- `04_devtools.qmd`: developer tools such as `rv`, `uv`, `arf`, and VS Code CLI
+- `05_recipe.qmd`: final Singularity definition assembly
+- `06_launch.qmd`: Slurm launch workflow
+- `setup.qmd`: project-specific setup and configuration
+
+The core design principle is that environment definitions should be represented as inspectable Python objects before being written to files. This lets the workbench remain readable, iterative, and reproducible while still producing concrete files such as `Singularity.def`, `spack.yaml`, `rproject.toml`, and `pyproject.toml`.

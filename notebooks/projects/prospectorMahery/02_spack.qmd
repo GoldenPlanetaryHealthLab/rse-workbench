@@ -1,6 +1,6 @@
 ---
 title: "Spacktivate: Build A Reproducible HPC Environment with Spack"
-subtitle: "Project: TEMPLATE"
+subtitle: "Project: prospectorMAHERY"
 format: gfm
 filters:
   - sorting-hat
@@ -68,14 +68,13 @@ For now, here is a minimal `spack` `spec` with the stuff I usually see:
 spack_env = {
     "spack": {
         "specs": [
-            "r@4.4.3",
+            "r@4.5.1",
             "python@3.14",
             "libiconv",
             "ncurses",
-            "openblas",
+            "openblas@0.3.32",
             "curl",
             "openssl",
-            "readline",
             "pkgconf",
             "abseil-cpp",
             "zlib-ng",
@@ -136,11 +135,42 @@ show_spython(
 
 If this fails, modify `spack_env` in Python, write it again, and retry.
 
-Example:
+Because this project already exists, there was already a `spack.yaml` file in the 
+project directory, so I'm going to add to it whatever was in the previous one:
 
 ```{python}
 #| eval: false
-spack_env["spack"]["specs"].append("libgit2")
+spack_env["spack"]["specs"] += [
+    "cmake",
+    "gmake",
+    "libuv",
+    "gmake",
+    "git",
+    "libx11",
+    "libxml2",
+    "freetype",
+    "libjpeg",
+    "libjpeg-turbo",
+    "libpng",
+    "libtiff",
+    "libwebp",
+    "icu4c",
+    "fontconfig",
+    "fribidi",
+    "harfbuzz",
+    "libgit2",
+    "cairo",
+    "r-cairo",
+    "glibc",
+    "r-devtools",
+    "r-rmarkdown",
+    "r-usethis",
+    "r-dplyr",
+    "r-readxl",
+    "readline@8.2",
+    "glibc",
+    
+]
 write_spack_yaml()
 ```
 
