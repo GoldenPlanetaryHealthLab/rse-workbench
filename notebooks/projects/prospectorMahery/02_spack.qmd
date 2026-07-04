@@ -5,8 +5,6 @@ format: gfm
 filters:
   - sorting-hat
   - ripper
-execute:
-  eval: false
 ---
 
 ```{python}
@@ -77,21 +75,30 @@ spack_env = {
             "openssl",
             "pkgconf",
             "abseil-cpp",
-            "zlib-ng",
+            "zlib",
+            "libwebp +libwebpmux",
         ],
-
         "view": "/work/.spack-env/view",
-
         "config": {
             "install_tree": {
-                "root": "/work/.spack-env/install"
-                },
+                "root": "/work/.spack-env/install",
+            },
             "source_cache": "/work/.spack/cache/source",
             "misc_cache": "/work/.spack/cache/misc",
-            "build_stage": ["/work/.spack/stage"]
+            "build_stage": ["/work/.spack/stage"],
+            "shared_linking": {
+                "type": "rpath",
+                "missing_library_policy": "error",
+            },
+            "modules": {
+                "prefix_inspections": {
+                    "lib": ["LD_LIBRARY_PATH"],
+                    "lib64": ["LD_LIBRARY_PATH"],
+                },
             },
         },
-    }
+    },
+}
 ```
 
 You can change the exact version of the language using the `@` syntax,
@@ -114,6 +121,8 @@ write_spack_yaml()
 Try the first basic install; we'll need to create our container directories while we're at it:
 
 ```{python}
+#| eval: false
+
 show_spython(
     spython_exec(
         f"""
@@ -143,8 +152,6 @@ project directory, so I'm going to add to it whatever was in the previous one:
 spack_env["spack"]["specs"] += [
     "cmake",
     "gmake",
-    "libuv",
-    "gmake",
     "git",
     "libx11",
     "libxml2",
@@ -160,15 +167,10 @@ spack_env["spack"]["specs"] += [
     "harfbuzz",
     "libgit2",
     "cairo",
-    "r-cairo",
     "glibc",
-    "r-devtools",
-    "r-rmarkdown",
-    "r-usethis",
-    "r-dplyr",
-    "r-readxl",
     "readline@8.2",
     "glibc",
+    "libuv@1.46.0",
     
 ]
 write_spack_yaml()

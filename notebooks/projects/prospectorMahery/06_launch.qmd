@@ -135,17 +135,21 @@ def install_in_container():
     tmp_root = Path(f"/tmp/{user}-rse-workbench-{job_id}")
     singularity_tmp = tmp_root / "singularity-tmp"
     singularity_cache = tmp_root / "singularity-cache"
-    container_home = project_dir / ".container-home"
 
-    for path in [singularity_tmp, singularity_cache, container_home]:
+    container_home = project_dir / ".container-home"
+    container_tmp = project_dir / ".container-tmp"
+
+    for path in [singularity_tmp, singularity_cache, container_home, container_tmp]:
         path.mkdir(parents=True, exist_ok=True)
 
-    # Host-side Singularity/Apptainer runtime locations.
     os.environ.update({
         "SINGULARITY_TMPDIR": str(singularity_tmp),
         "SINGULARITY_CACHEDIR": str(singularity_cache),
         "APPTAINER_TMPDIR": str(singularity_tmp),
         "APPTAINER_CACHEDIR": str(singularity_cache),
+
+        "SINGULARITYENV_TMPDIR": "/tmp",
+        "APPTAINERENV_TMPDIR": "/tmp",
 
         "SINGULARITYENV_XDG_CACHE_HOME": "/home/rse/.cache",
         "SINGULARITYENV_XDG_CONFIG_HOME": "/home/rse/.config",
@@ -162,38 +166,43 @@ def install_in_container():
         "--containall",
         "--home", f"{container_home}:/home/rse",
         "--bind", f"{project_dir}:/work",
+        "--bind", f"{container_tmp}:/tmp",
     ]
+
     runtime_command = """
 set -euo pipefail
 
-export TMPDIR=/work/.spack/tmp
-mkdir -p "$TMPDIR"
+export TMPDIR=/tmp
+mkdir -p /tmp /home/rse/.cache /home/rse/.config /home/rse/.local/share
+
+echo "TMPDIR=$TMPDIR"
+df -h /tmp /work
 
 . /opt/spack/share/spack/setup-env.sh
 cd /work
 
 spack env activate -d .
-spack concretize
-spack install --deprecated --fail-fast -j12 --no-checksum
+spack concretize --force 
 
-rv sync || true
+spack install --deprecated --fail-fast -j8 --no-checksum
+
+export SPACK_VIEW=/work/.spack-env/view
+export PATH="$SPACK_VIEW/bin:${PATH:-}"
+export LD_LIBRARY_PATH="$SPACK_VIEW/lib:$SPACK_VIEW/lib64:${LD_LIBRARY_PATH:-}"
+export PKG_CONFIG_PATH="$SPACK_VIEW/lib/pkgconfig:$SPACK_VIEW/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
+export CPATH="$SPACK_VIEW/include:${CPATH:-}"
+export LIBRARY_PATH="$SPACK_VIEW/lib:$SPACK_VIEW/lib64:${LIBRARY_PATH:-}"
+
+rv sync
 """
 
-    result = Client.execute(
+    return Client.execute(
         image=str(singularity_sif),
-        command=[
-            "bash",
-            "--noprofile",
-            "--norc",
-            "-lc",
-            runtime_command,
-        ],
+        command=["bash", "--noprofile", "--norc", "-lc", runtime_command],
         options=options,
         sudo=False,
         return_result=True,
     )
-
-    return result
 ```
 
 ```{python}
@@ -205,7 +214,24 @@ job.job_id
 
 ```{python}
 #| eval: false
-show_submitit_job(job)
+
+j = show_submitit_job(job)
+if j is not None:
+    print("\n".join(j['message']))
+```
+
+```{python}
+show_spython(
+    spython_exec(
+        """
+        grep -nE 'libuv|g\+\+|fs.so|RPATH|rpath|LD_LIBRARY_PATH' \
+  /work/.spack/stage/ttapera/spack-stage-r-fs-*/spack-build-out.txt
+        """,
+        image=str(SINGULARITY_SIF),
+        writable=False,
+        bind_project=True,
+    )
+)
 ```
 
 ## 10. Runtime command

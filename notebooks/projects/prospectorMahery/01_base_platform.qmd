@@ -107,6 +107,7 @@ for path in [
     path.mkdir(parents=True, exist_ok=True)
 ```
 
+
 These elements are pretty simple!
 
 ## 3. Build a disposable sandbox

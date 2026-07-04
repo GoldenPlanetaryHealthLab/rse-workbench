@@ -35,7 +35,13 @@ recipe.install = [
 ]
 
 recipe.environ = [
-    "PATH=/usr/local/bin:/opt/views/view/bin:/root/.cargo/bin:/usr/cargo/bin:$PATH",
+    "SPACK_VIEW=/work/.spack-env/view",
+    "PATH=$SPACK_VIEW/bin:/usr/local/bin:/opt/views/view/bin:/root/.cargo/bin:/usr/cargo/bin:$PATH",
+    "LD_LIBRARY_PATH=$SPACK_VIEW/lib:$SPACK_VIEW/lib64:$LD_LIBRARY_PATH",
+    "PKG_CONFIG_PATH=$SPACK_VIEW/lib/pkgconfig:$SPACK_VIEW/lib64/pkgconfig:$PKG_CONFIG_PATH",
+    "CPATH=$SPACK_VIEW/include:$CPATH",
+    "LIBRARY_PATH=$SPACK_VIEW/lib:$SPACK_VIEW/lib64:$LIBRARY_PATH",
+    "MAKEFLAGS=-j2"
 ]
 
 recipe.test = [

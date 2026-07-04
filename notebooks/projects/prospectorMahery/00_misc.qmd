@@ -12,7 +12,7 @@ execute:
 This notebook contains miscellaneous functions and helpers for managing the environment engineering workflow.
 
 ```{python}
-#| sorting-hat: remove
+#| sorting-hat: keep
 from pathlib import Path
 import os
 import subprocess
@@ -41,7 +41,7 @@ These helpers make the notebook readable while we iterate.
 ## General shell commands
 
 It became necessary to have some helpers for just throwing something at the
-shell, without having to rewrite subprocess.run() over and over.
+shell, without having to rewrite `subprocess.run()` over and over.
 
 ```{python}
 def shell(cmd, *, cwd=None):
