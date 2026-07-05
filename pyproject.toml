@@ -4,6 +4,13 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "pytask>=0.6.0",
+    "pyprojroot>=0.3.0",
+    "pyyaml>=6.0.0",
+    "rich>=13.0.0",
+    "simple-slurm>=0.3.6",
+    "spython>=0.3.14",
+    "submitit>=1.5.0",
+    "tomli-w>=1.0.0",
 ]
 
 [build-system]

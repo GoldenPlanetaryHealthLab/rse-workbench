@@ -1,26 +1,113 @@
 ---
-title: "RSE Workbench Templates"
+title: "RSE Workbench Project Environment"
+subtitle: "Template for a scientific project runtime contract"
+format:
+  html:
+    toc: true
+    code-fold: false
+execute:
+  eval: false
 ---
 
-This repository contains reusable RSE Workbench templates for building project-specific research computing environments.
+The goal of this notebook is to iteratively define the layers of a reproducible
+environment, define the contract between those layers, then test that contract.
 
-The workbench is an environment-scaffolding studio. It is not the final runtime owner and it is separate from `blacksmith`. The intended pattern is:
+In my experience, building the reproducible scientific
+software stack is something of a journey. It's rarely
+a single step, and to assume as much is to actually set
+oneself up for disappointment. It can take a while to
+iterate several times to get the right combination of
+tools, libraries, and packages that work together in a
+reproducible way. Worse still, it can be incredibly
+frustrating, and as one's patience wears thin, one can be tempted to 
+take shortcuts that you don't write down, which means when
+you clone the environment or project to a new system,
+or even just to rerun it a few months later,
+you find yourself in the dreaded dependency hell.
 
-1. Start from the shared notebook templates in `notebooks/templates/`.
-2. Populate a project-specific workbench folder under `notebooks/projects/<project-name>/`.
-3. Use the notebooks to narrate, inspect, iterate, and export environment definitions.
-4. Write final runtime files back to the project repository.
-5. Use project-local build, launch, and run interfaces to execute the environment on the cluster.
+To remedy this, we came up with this recipe-style
+workbench tool. We hope that by stepping through the
+notebooks in order, users will be better able to
+not only reproducibly build their environments, 
+but also understand the layers and composition of the environment
+intuitively, so that debugging and troubleshooting
+is easier.
 
-The templates support a staged workflow:
+Here's a summary of the layers and their owners:
 
-- `00_misc.qmd`: shared helpers and conventions
-- `01_base_platform.qmd`: base Singularity / Apptainer platform image exploration
-- `02_spack.qmd`: system and compiled dependencies
-- `03_datascience_lang.qmd`: R and Python project environments
-- `04_devtools.qmd`: developer tools such as `rv`, `uv`, `arf`, and VS Code CLI
-- `05_recipe.qmd`: final Singularity definition assembly
-- `06_launch.qmd`: Slurm launch workflow
-- `setup.qmd`: project-specific setup and configuration
+- [Singularity](https://singularity.hpcng.org/) provides the isolated 
+Linux runtime and binds the project directory and its working files at 
+`/work`.
+- The platform image provides general essential tools: Spack, `rv`, 
+`uv`, `arf`, `code`, and the `/work` directory. If necessary,
+the platform image can also install a limited set of system
+dependencies.
+- [Spack](https://spack.readthedocs.io/) largely owns 
+the resolution of the scientific system dependencies such as R
+and Python, and package dependencies like `libuv`, `zlib`, etc., 
+as well as compilers, headers, and shared libraries.
+- The Spack `view` exposes the system layer at one stable 
+prefix: `/work/.spack-env/view`.
+- The activation script makes the Spack view discoverable to 
+compilers, linkers, package builds, and runtime processes.
+- `rv` owns the project's R package dependencies.
+- `uv` owns the project's Python package dependencies.
+- The project source tree (bound at `/work`) owns analysis 
+code, project configuration, lockfiles, and runtime state.
 
-The core design principle is that environment definitions should be represented as inspectable Python objects before being written to files. This lets the workbench remain readable, iterative, and reproducible while still producing concrete files such as `Singularity.def`, `spack.yaml`, `rproject.toml`, and `pyproject.toml`.
+Durable writable Singularity sandboxes on shared `/n` 
+filesystems are unreliable, so instead, we use disposable 
+node-local sandboxes for exploration and layering, then 
+build final unwritable SIFs for durable runtime. In other words,
+we tinker in a sandbox throughout this series notebooks,
+reproducibly adding layers to our final concrete
+environment. When we are ready, we bake the final recipe
+into a solid SIF container; at runtime, we bind the project
+directory into the container, activate the environment within,
+and work away! So long as all changes to files happen within
+the `/work` directory, and all scripted, runtime level 
+installations are done through Spack, `rv`, or `uv`, we have a 
+shippable containerized environment that can be 
+reproduced on any system with Singularity.
+
+To get started, copy the contents of the `notebooks/rse_workbench` 
+folder into a new `notebooks/projects/<project-name>` directory, 
+and run the notebooks in order. The notebooks are designed to 
+be read and executed in order, but you can also skip around 
+if you are already familiar with the concepts.
+
+There are a number of helper functions defined in the `rse_workbench` 
+package that are used throughout the notebooks. For your project,
+just make sure you import the functions you need. Re-rendering the
+RSE Workbench will re-export the module functions to `src`, so
+if you need to make adjustments to the functions or add new ones, you 
+can do that in the `rse_workbench` folder's notebooks and re-render
+the project.
+
+Before treating the environment as ready, ensure you have a record of:
+
+- Which branch owns this project.
+- Which SIF was built.
+- Which Spack specs were added beyond the defaults.
+- Which R and Python packages were added beyond the defaults.
+- Whether `/work/env/check-system-deps.sh` passes inside the SIF.
+- Whether `rv sync` completed without ignored failures.
+- The VSCode tunnel job ID and log path.
+
+---
+
+In closing, when building environments, keep in mind the following 
+principles; you may come up with your own or modify these,
+but the point is to define your problem clearly, know the constraints
+of both your scenario and your ability to problem-solve,
+and be flexible, but methodical, as you test your assumptions:
+
+- Do not make one tool responsible for the whole scientific software stack.
+- Define layers, define the contract between layers, then test that contract.
+- The project is bound into the container at `/work`.
+- Spack owns the system dependency layer.
+- `rv` owns the R package layer.
+- `uv` owns the Python package layer.
+- A Spack view makes the system layer available at one stable prefix.
+- Installing a library is not the same as making it discoverable.
+- Avoid project-level Spack recipes unless there is a strong reason to use them.

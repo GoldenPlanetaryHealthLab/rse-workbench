@@ -1,0 +1,416 @@
+---
+title: "RSE Workbench Project Environment"
+subtitle: "Template for a scientific project runtime contract"
+format:
+  html:
+    toc: true
+    code-fold: false
+execute:
+  eval: false
+---
+
+The goal of this notebook is not to make one tool responsible for the whole
+scientific software stack. The goal is to define layers, define the contract
+between layers, then test that contract.
+
+The runtime boundary is:
+
+- Singularity/Apptainer provides the isolated Linux runtime and binds the project at `/work`.
+- The platform image provides general tools: Spack, `rv`, `uv`, `arf`, `code`, and `/work`.
+- Spack owns system dependencies such as R, Python, `libuv`, `zlib`, compilers, headers, and shared libraries.
+- The Spack view exposes the system layer at one stable prefix: `/work/.spack-env/view`.
+- The activation script makes the Spack view discoverable to compilers, linkers, package builds, and runtime processes.
+- `rv` owns R package dependencies.
+- `uv` owns Python package dependencies.
+- The project source tree owns analysis code, project configuration, lockfiles, and runtime state.
+
+Durable writable Singularity sandboxes on shared `/n` filesystems are unreliable.
+Use disposable node-local sandboxes for exploration, then build final SIFs for
+durable runtime.
+
+## 1. Project Contract
+
+Edit only this cell for a new project. Every path below is derived from these
+values so the rest of the notebook can stay reusable.
+
+```{python}
+from pathlib import Path
+from pyprojroot import here
+
+PROJECT_NAME = "prospectorMahery"
+PROJECT_DIR = Path("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors") / PROJECT_NAME
+WORKBENCH_DIR = here()
+RUNTIME_DIR = WORKBENCH_DIR / "projects" / PROJECT_NAME
+
+BASE_IMAGE = "docker://spack/rockylinux8:develop"
+
+R_VERSION = "4.5.1"
+PYTHON_VERSION = "3.14"
+
+SLURM_PARTITION = "hsph"
+SLURM_CPUS = 12
+SLURM_MEM = "32G"
+SLURM_HOURS = 6
+
+ENABLE_DIRENV = False
+```
+
+Derive the contract paths. These names are intentionally explicit because they
+are the boundary between this notebook, the project tree, Slurm, and the
+container.
+
+```{python}
+from rse_workbench.config import ProjectContract
+
+SINGULARITY_DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
+SINGULARITY_SIF = PROJECT_DIR / ".devcontainer" / "Singularity.sif"
+SPACK_YAML_PATH = PROJECT_DIR / "spack.yaml"
+RPROJECT_TOML_PATH = PROJECT_DIR / "rproject.toml"
+PYPROJECT_TOML_PATH = PROJECT_DIR / "pyproject.toml"
+CONTAINER_HOME = PROJECT_DIR / ".container-home"
+CONTAINER_TMP = PROJECT_DIR / ".container-tmp"
+SUBMITIT_DIR = PROJECT_DIR / "slurm" / "submitit"
+
+contract = ProjectContract(
+    project_name=PROJECT_NAME,
+    project_dir=PROJECT_DIR,
+    workbench_dir=WORKBENCH_DIR,
+    runtime_dir=RUNTIME_DIR,
+    base_image=BASE_IMAGE,
+    r_version=R_VERSION,
+    python_version=PYTHON_VERSION,
+    slurm_partition=SLURM_PARTITION,
+    slurm_cpus=SLURM_CPUS,
+    slurm_mem=SLURM_MEM,
+    slurm_hours=SLURM_HOURS,
+    enable_direnv=ENABLE_DIRENV,
+)
+contract.ensure_directories()
+```
+
+## 2. platform recipe
+
+The platform image should provide tools, not a project-specific dependency
+closure. It starts from the Rocky/Spack base image, installs minimal OS tools,
+creates `/work`, and installs `rv`, `uv`, `arf`, and the VSCode CLI.
+
+Project-specific Spack view activation variables do not belong in the image
+`%environment`. The project provides those through `/work/env/activate-system-deps.sh`.
+
+```{python}
+from rse_workbench.recipe import build_platform_recipe
+
+definition = build_platform_recipe(base_image=BASE_IMAGE)
+SINGULARITY_DEF.write_text(definition)
+print(definition)
+```
+
+## 3. Runtime Filesystem Contract
+
+The project is bound into the container at `/work`. Project-backed
+`.container-home` and `.container-tmp` directories provide durable home/cache
+state and a large temporary filesystem. Binding `.container-tmp` to `/tmp`
+avoids build failures caused by small container or session temporary files.
+
+The final runtime uses:
+
+```text
+PROJECT_DIR      -> /work
+.container-home -> /home/rse
+.container-tmp  -> /tmp
+```
+
+## 4. System Dependency Layer with Spack
+
+Spack owns only the system dependency layer. Avoid CRAN-level Spack recipes
+such as `r-fs`, `r-httpuv`, `r-dplyr`, or `r-rmarkdown` unless there is a
+strong reason. Those packages belong to `rv`.
+
+Installing a library is not the same as making it discoverable. For example,
+`httpuv` may find `libuv` through `pkg-config` while still failing to find
+`zlib.h`; this is why the activation bridge exists. Also, `spack.yaml` cannot
+patch missing `depends_on()` metadata in a Spack package recipe.
+
+```{python}
+from rse_workbench.spack import default_spack_env, write_spack_yaml
+
+spack_env = default_spack_env(
+    r_version=R_VERSION,
+    python_version=PYTHON_VERSION,
+)
+
+write_spack_yaml(SPACK_YAML_PATH, spack_env)
+SPACK_YAML_PATH
+```
+
+## 5. Language Package Layer with rv and uv
+
+`rv` owns R package dependencies in `rproject.toml`. `uv` owns Python package
+dependencies in `pyproject.toml`. These files live in the project tree so they
+travel with the scientific code and are consumed inside `/work`.
+
+```{python}
+from rse_workbench.languages import (
+    default_pyproject,
+    default_rproject,
+    write_pyproject_toml,
+    write_rproject_toml,
+)
+
+rproject = default_rproject(
+    project_name=PROJECT_NAME,
+    r_version=R_VERSION,
+)
+pyproject = default_pyproject(
+    project_name=PROJECT_NAME,
+    python_version=PYTHON_VERSION,
+)
+
+write_rproject_toml(RPROJECT_TOML_PATH, rproject)
+write_pyproject_toml(PYPROJECT_TOML_PATH, pyproject)
+```
+
+## 6. Developer Tooling Layer
+
+Developer tools belong in the platform image when they are useful across
+projects. This template installs:
+
+- `rv` for the R package layer
+- `uv` for the Python package layer
+- `arf` for R console workflows
+- `code` for VSCode tunnel sessions
+
+The scientific dependency contract still lives in the project files under
+`/work`, not inside the image.
+
+```{python}
+from rse_workbench.singularity import spython_exec, show_spython
+
+show_spython(
+    spython_exec(
+        """
+        echo "spack: $(command -v spack)"
+        echo "rv: $(command -v rv)"
+        echo "uv: $(command -v uv)"
+        echo "arf: $(command -v arf)"
+        echo "code: $(command -v code)"
+        """,
+        image=SINGULARITY_SIF,
+        bind_project=PROJECT_DIR,
+    )
+)
+```
+
+## 7. Layer Bridge and Activation
+
+The activation bridge is the canonical runtime contract. Do not scatter these
+exports throughout notebooks or launch scripts.
+
+```{python}
+from rse_workbench.activation import write_activation_scripts
+
+write_activation_scripts(PROJECT_DIR, enable_direnv=ENABLE_DIRENV)
+```
+
+The variables mean:
+
+```text
+PATH              finds Spack executables
+PKG_CONFIG_PATH   finds .pc files like libuv.pc
+CPATH             finds headers like zlib.h
+LIBRARY_PATH      finds libraries during linking
+LD_LIBRARY_PATH   finds shared libraries at runtime
+TMPDIR            directs builds to large project-backed temporary space
+```
+
+If `ENABLE_DIRENV = True`, this notebook also writes `.envrc` with:
+
+```bash
+source_env env/activate-system-deps.sh
+```
+
+`direnv` is only a developer convenience layer. The canonical runtime contract
+is still `env/activate-system-deps.sh`.
+
+## 8. Validation and Smoke Tests
+
+Small validation scripts are easier to trust than long install logs. The
+generated check script verifies that `R`, `python`, `pkg-config`, `libuv`, and
+headers such as `zlib.h` and `uv.h` are discoverable through the Spack view.
+
+```{python}
+from rse_workbench.singularity import show_spython
+
+show_spython(
+    spython_exec(
+        """
+        set -euo pipefail
+        . /opt/spack/share/spack/setup-env.sh
+        cd /work
+        spack env activate -d .
+        . /work/env/activate-system-deps.sh
+        /work/env/check-system-deps.sh
+        """,
+        image=SINGULARITY_SIF,
+        bind_project=PROJECT_DIR,
+    ),
+    tail=120,
+)
+```
+
+## 9. Build Final SIF
+
+Build the final read-only SIF through Slurm so Singularity has node-local
+temporary space and enough memory.
+
+```{python}
+import submitit
+from pathlib import Path
+import os
+
+executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+executor.update_parameters(
+    timeout_min=SLURM_HOURS * 60,
+    slurm_partition=SLURM_PARTITION,
+    mem_gb=float(SLURM_MEM.rstrip("G")),
+    cpus_per_task=SLURM_CPUS,
+    slurm_job_name=f"build-{PROJECT_NAME}-container",
+)
+
+def build_container(singularity_def=SINGULARITY_DEF, singularity_sif=SINGULARITY_SIF):
+    from spython.main import Client
+    from pathlib import Path
+    import os
+
+    job_id = os.environ.get("SLURM_JOB_ID", "local")
+    user = os.environ["USER"]
+    tmp_root = Path(f"/tmp/{user}-rse-workbench-{job_id}")
+    singularity_tmp = tmp_root / "singularity-tmp"
+    singularity_cache = tmp_root / "singularity-cache"
+
+    singularity_tmp.mkdir(parents=True, exist_ok=True)
+    singularity_cache.mkdir(parents=True, exist_ok=True)
+
+    os.environ["SINGULARITY_TMPDIR"] = str(singularity_tmp)
+    os.environ["SINGULARITY_CACHEDIR"] = str(singularity_cache)
+    os.environ["APPTAINER_TMPDIR"] = str(singularity_tmp)
+    os.environ["APPTAINER_CACHEDIR"] = str(singularity_cache)
+
+    return Client.build(
+        image=str(singularity_sif),
+        recipe=str(singularity_def),
+        options=["--fakeroot", "--force"],
+        sudo=False,
+        return_result=True,
+    )
+```
+
+```{python}
+job = executor.submit(build_container)
+job.job_id
+```
+
+```{python}
+from rse_workbench.slurm import show_submitit_job
+
+show_submitit_job(job)
+```
+
+## 10. Install Project Environment in Container
+
+The final install function runs inside the SIF, binds the project as `/work`,
+activates Spack, installs the system layer, activates the bridge, runs the
+small validation script, then runs `rv sync`. It fails loudly if any required
+step fails.
+
+```{python}
+from rse_workbench.project import install_in_container
+
+job = executor.submit(
+    install_in_container,
+    project_dir=PROJECT_DIR,
+    singularity_sif=SINGULARITY_SIF,
+)
+job.job_id
+```
+
+```{python}
+result = show_submitit_job(job)
+if result is not None:
+    print(result)
+```
+
+The runtime command executed by the helper is:
+
+```bash
+set -euo pipefail
+
+export TMPDIR=/tmp
+mkdir -p /tmp /home/rse/.cache /home/rse/.config /home/rse/.local/share
+
+echo "TMPDIR=$TMPDIR"
+df -h /tmp /work
+
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+
+spack env activate -d .
+spack concretize --force
+spack install --deprecated --fail-fast -j8 --no-checksum
+
+. /work/env/activate-system-deps.sh
+/work/env/check-system-deps.sh
+
+rv sync
+```
+
+## 11. Launch VSCode / Runtime Entry Point
+
+Generate the project-local launch script. It uses `simple_slurm`, creates logs,
+binds the project to `/work`, binds `.container-tmp` to `/tmp`, sources the
+activation bridge, and starts the VSCode tunnel.
+
+```{python}
+from rse_workbench.slurm import write_launch_script
+
+write_launch_script(
+    project_name=PROJECT_NAME,
+    project_dir=PROJECT_DIR,
+    singularity_sif=SINGULARITY_SIF,
+    launch_script=PROJECT_DIR / "slurm" / "launch" / "launch_container.sh",
+    partition=SLURM_PARTITION,
+    cpus=SLURM_CPUS,
+    mem=SLURM_MEM,
+    hours=SLURM_HOURS,
+)
+```
+
+Submit it from the project directory:
+
+```bash
+sbatch slurm/launch/launch_container.sh
+```
+
+## 12. Lessons and Sitrep
+
+Before treating the environment as ready, record:
+
+- Which branch owns this project.
+- Which SIF was built.
+- Which Spack specs were added beyond the defaults.
+- Which R and Python packages were added beyond the defaults.
+- Whether `/work/env/check-system-deps.sh` passes inside the SIF.
+- Whether `rv sync` completed without ignored failures.
+- The VSCode tunnel job ID and log path.
+
+Core lessons:
+
+- Do not make one tool responsible for the whole scientific software stack.
+- Define layers, define the contract between layers, then test that contract.
+- The project is bound into the container at `/work`.
+- Spack owns the system dependency layer.
+- `rv` owns the R package layer.
+- `uv` owns the Python package layer.
+- A Spack view makes the system layer available at one stable prefix.
+- Installing a library is not the same as making it discoverable.
+- Avoid CRAN-level Spack recipes unless there is a strong reason to use them.

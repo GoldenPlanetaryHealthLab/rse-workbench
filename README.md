@@ -5,6 +5,34 @@ This template is designed for climate and public health analysis at Harvard FASR
 - **Quarto** for reproducible notebooks/reports
 - **Spack** for reproducible software environments on HPC
 
+## Project environment workflow
+
+Each scientific project should get its own branch and its own copied notebook
+template:
+
+```bash
+git checkout -b project/<project_name>
+mkdir -p notebooks/projects/<project_name>
+cp notebooks/templates/rse-workbench-project-template.qmd notebooks/projects/<project_name>/environment.qmd
+```
+
+Then edit the Project Contract chapter in `environment.qmd` and step through
+the notebook. The workflow writes project-owned runtime files such as
+`spack.yaml`, `rproject.toml`, `pyproject.toml`,
+`env/activate-system-deps.sh`, `env/check-system-deps.sh`, the Singularity
+definition, and the Slurm launch script.
+
+The main rule is: do not make one tool responsible for the whole scientific
+software stack. Singularity/Apptainer owns runtime isolation, Spack owns the
+system dependency layer, `rv` owns R packages, `uv` owns Python packages, and
+the activation script defines the bridge between those layers.
+
+For the current Mahery project, use:
+
+```text
+notebooks/projects/prospectorMahery/environment.qmd
+```
+
 ## Suggested project layout
 
 ```text

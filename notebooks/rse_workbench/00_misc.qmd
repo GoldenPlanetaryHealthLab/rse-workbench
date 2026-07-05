@@ -1,0 +1,165 @@
+---
+title: "Miscellaneous Functions"
+format: gfm
+execute:
+  eval: false
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "config"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+---
+
+This notebook collects miscellaneous functions that are useful for the RSE 
+Workbench. 
+
+Here are a couple of functions that allow us to quickly
+build our singularity image and iterate on it by executing commands inside the 
+image. These functions are:
+
+```{python}
+#| sorting-hat: keep
+"""Singularity/Apptainer execution helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from rich.columns import Columns
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+
+console = Console()
+
+
+def spython_exec(
+    command: str,
+    image: str | Path,
+    options: list[str] | None = None,
+    writable: bool = False,
+    fakeroot: bool = False,
+    bind_project: str | Path | None = None,
+    return_result: bool = True,
+) -> dict[str, Any]:
+    """Execute a command in a Singularity image through spython."""
+
+    from spython.main import Client
+
+    exec_options = list(options or ["--no-home"])
+
+    if writable and "--writable" not in exec_options:
+        exec_options.append("--writable")
+
+    if fakeroot and "--fakeroot" not in exec_options:
+        exec_options.append("--fakeroot")
+
+    if bind_project:
+        exec_options += ["--bind", f"{Path(bind_project)}:/work"]
+
+    return Client.execute(
+        image=str(image),
+        command=["bash", "--noprofile", "--norc", "-c", command],
+        options=exec_options,
+        sudo=False,
+        return_result=return_result,
+    )
+
+
+def normalize_spython_result(result: Any) -> dict[str, Any]:
+    """Normalize spython's mixed result shapes into stdout/stderr/code."""
+
+    if not isinstance(result, dict):
+        return {"stdout": str(result), "stderr": "", "return_code": None, "raw": result}
+
+    message = result.get("message", "")
+    return_code = result.get("return_code", None)
+
+    if isinstance(message, list):
+        stdout = message[0] if len(message) > 0 else ""
+        stderr = message[1] if len(message) > 1 else ""
+    else:
+        stdout = message or ""
+        stderr = ""
+
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "return_code": return_code,
+        "raw": result,
+    }
+
+
+def show_spython(result: Any, *, tail: int | None = None) -> dict[str, Any]:
+    """Render a spython result in a notebook-friendly panel."""
+
+    normalized = normalize_spython_result(result)
+    stdout = normalized["stdout"]
+    stderr = normalized["stderr"]
+
+    if tail:
+        stdout = "\n".join(stdout.splitlines()[-tail:])
+        stderr = "\n".join(stderr.splitlines()[-tail:])
+
+    console.print(
+        Panel(
+            Columns(
+                [
+                    Panel(Syntax(stdout or "<empty>", "text"), title="stdout / message", border_style="green"),
+                    Panel(
+                        Syntax(stderr or "<empty>", "text"),
+                        title="stderr",
+                        border_style="red" if normalized["return_code"] else "yellow",
+                    ),
+                ]
+            ),
+            title=f"Exit code: {normalized['return_code']}",
+            border_style="green" if normalized["return_code"] == 0 else "red",
+        )
+    )
+
+    return normalized
+
+```
+
+
+To see the ongoing result of a job with `submitit`, we can use the following helper function:
+
+```{python}
+#| sorting-hat: keep
+"""Slurm display and launch-script helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
+console = Console()
+
+
+def show_submitit_job(job: Any) -> Any:
+    """Show stdout/stderr for a submitit job and return its result when done."""
+
+    console.print(f"Job ID: {job.job_id}")
+    console.print(f"Done: {job.done()}")
+
+    stdout = job.stdout() or "<empty>"
+    stderr = job.stderr() or "<empty>"
+
+    console.print(Panel(Text(stdout[-8000:] or "<empty>"), title="stdout", border_style="green"))
+    console.print(Panel(Text(stderr[-8000:] or "<empty>"), title="stderr", border_style="red"))
+
+    if not job.done():
+        return None
+
+    return job.result()
+```
