@@ -16,7 +16,7 @@ execute:
 
 ```{python}
 #| sorting-hat: remove
-#from rse_workbench.misc import show_submitit_job
+#from rse_workbench.helpers import show_submitit_job
 #from rse_workbench.build_install import install_in_container
 
 ```

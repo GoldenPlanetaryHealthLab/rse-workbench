@@ -1,9 +1,7 @@
 #' ---
-#' title: 3  Miscellaneous Functions
+#' title: 3  Miscellaneous Helper Functions
 #' ---
 #' 
-
-"""Singularity/Apptainer execution helpers."""
 
 from __future__ import annotations
 

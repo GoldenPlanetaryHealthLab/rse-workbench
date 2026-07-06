@@ -15,12 +15,21 @@ execute:
 ---
 
 ```{python}
-from rse_workbench.datascience import (
-    default_pyproject,
-    default_rproject,
-    write_pyproject_toml,
-    write_rproject_toml,
-)
+#| sorting-hat: keep
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+```
+
+```{python}
+#| sorting-hat: remove
+# from rse_workbench.datascience import (
+#     default_pyproject,
+#     default_rproject,
+#     write_pyproject_toml,
+#     write_rproject_toml,
+# )
 
 ```
 
@@ -91,11 +100,6 @@ DEFAULT_PYTHON_PACKAGES = [
 
 ```{python}
 #| sorting-hat: keep
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Any
-
 
 def _dedupe(items: list[str]) -> list[str]:
     seen = set()

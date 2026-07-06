@@ -1,5 +1,5 @@
 ---
-title: "Miscellaneous Functions"
+title: "Miscellaneous Helper Functions"
 format: gfm
 execute:
   eval: false
@@ -8,7 +8,7 @@ filters:
     - ripper
 extensions:
   ripper:
-    output-name: "config"
+    output-name: "helpers"
     output-dir: "../../src/rse_workbench"
   sorting-hat:
         keep: python
@@ -23,8 +23,6 @@ image. These functions are:
 
 ```{python}
 #| sorting-hat: keep
-"""Singularity/Apptainer execution helpers."""
-
 from __future__ import annotations
 
 from pathlib import Path

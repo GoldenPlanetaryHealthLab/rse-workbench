@@ -1,0 +1,98 @@
+---
+title: "Project Contract"
+format: gfm
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "project_contract"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+execute: 
+  eval: false
+---
+
+The project contract is the initial source of truth for the
+project. In Python, it's fairly easy to work with capital
+letter "constants", toss them around with pathlib,
+and use them to generate files and folders. The contract
+section makes use of this to get the project started:
+
+```{python}
+#| sorting-hat: remove
+from pathlib import Path
+from pyprojroot import here
+
+PROJECT_NAME = "prospectorMahery" # FILL ME IN
+assert PROJECT_NAME, "Please fill in the project name."
+PROJECT_DIR = Path("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors") / PROJECT_NAME
+WORKBENCH_DIR = here()
+RUNTIME_DIR = WORKBENCH_DIR / "projects" / PROJECT_NAME
+
+BASE_IMAGE = "docker://spack/rockylinux8:develop"
+
+R_VERSION = "4.5.1"
+PYTHON_VERSION = "3.14"
+
+ENABLE_DIRENV = False
+```
+
+We can dedicate a section to the Slurm variables for the typical
+runtime while we're building the project:
+
+```{python}
+#| sorting-hat: remove
+SLURM_PARTITION = "hsph"
+SLURM_CPUS = 12
+SLURM_MEM = "32G"
+SLURM_HOURS = 3 # this is the project build time, not the runtime for a single job
+SLURM_EMAIL = "aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com" # aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com
+```
+
+Here are a few more useful paths. These names are intentionally 
+explicit because they are the boundary between this 
+notebook, the project tree, Slurm, and the container.
+
+```{python}
+#| sorting-hat: remove
+SINGULARITY_DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
+SINGULARITY_SIF = PROJECT_DIR / ".devcontainer" / "Singularity.sif"
+SPACK_YAML_PATH = PROJECT_DIR / "spack.yaml"
+RPROJECT_TOML_PATH = PROJECT_DIR / "rproject.toml"
+PYPROJECT_TOML_PATH = PROJECT_DIR / "pyproject.toml"
+CONTAINER_HOME = PROJECT_DIR / ".container-home"
+CONTAINER_TMP = PROJECT_DIR / ".container-tmp"
+SUBMITIT_DIR = PROJECT_DIR / "slurm" / "submitit"
+```
+
+Lastly, we can create a `ProjectContract` `dataclass` to help us
+store all of these values in one place:
+
+```{python}
+#| sorting-hat: remove
+
+from rse_workbench.project_contract import ProjectContract
+
+project_contract = ProjectContract(
+    project_name=PROJECT_NAME,
+    project_dir=PROJECT_DIR,
+    workbench_dir=WORKBENCH_DIR,
+    runtime_dir=RUNTIME_DIR,
+    base_image=BASE_IMAGE,
+    r_version=R_VERSION,
+    python_version=PYTHON_VERSION,
+    slurm_partition=SLURM_PARTITION,
+    slurm_cpus=SLURM_CPUS,
+    slurm_mem=SLURM_MEM,
+    slurm_hours=SLURM_HOURS,
+    enable_direnv=ENABLE_DIRENV,
+)
+project_contract.ensure_directories()
+```
+
+By the end of this chapter, you should be able to answer the question,
+"what is this project, and where does it live?"
+
+In the next chapter, you'll define the platform recipe.

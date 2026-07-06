@@ -3,12 +3,10 @@
 #' ---
 #' 
 
-from rse_workbench.datascience import (
-    default_pyproject,
-    default_rproject,
-    write_pyproject_toml,
-    write_rproject_toml,
-)
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
 
 
 DEFAULT_R_PACKAGES = [
@@ -62,12 +60,6 @@ DEFAULT_PYTHON_PACKAGES = [
     "ipykernel",
     "jupyterlab",
 ]
-
-
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Any
 
 
 def _dedupe(items: list[str]) -> list[str]:

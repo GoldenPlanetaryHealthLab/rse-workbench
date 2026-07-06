@@ -1,0 +1,147 @@
+---
+title: "Bridge and Activation"
+format: gfm
+execute: 
+  eval: false
+---
+
+To test that the project environment is discoverable and
+functional, we use this chapter to test the environment.
+
+```{python}
+from rse_workbench.config import show_spython, spython_exec
+```
+
+First, test that `spack` works:
+
+```{python}
+show_spython(
+    spython_exec(
+        """
+        set -euo pipefail
+        . /opt/spack/share/spack/setup-env.sh
+        cd /work
+        spack env activate -d .
+        spack find
+        """,
+        image=str(TMP_SANDBOX),
+        bind_project=PROJECT_DIR,
+    ),
+    tail=120,
+)
+```
+
+Now let's see what happens when we check the `spack` environment:
+
+```{python}
+res = show_spython(
+    spython_exec(
+        """
+        set -euo pipefail
+        . /opt/spack/share/spack/setup-env.sh
+        cd /work
+        spack env activate -d .
+
+        echo $PATH
+        echo $PKG_CONFIG_PATH
+        echo $CPATH
+        echo $LIBRARY_PATH
+        echo $LD_LIBRARY_PATH
+        echo $TMPDIR
+
+        spack concretize --force
+        #spack install --deprecated --fail-fast -j8 --no-checksum
+        """,
+        image=str(TMP_SANDBOX),
+        bind_project=PROJECT_DIR,
+    ),
+)
+```
+
+We can see that the above environment variables are malformed. We can
+add them to our recipe:
+
+```{python}
+recipe.environ.extend(
+    [   
+        "PATH=$SPACK_VIEW/bin:${PATH:-}",
+        "PKG_CONFIG_PATH=$SPACK_VIEW/lib/pkgconfig:$SPACK_VIEW/lib64/pkgconfig:${PKG_CONFIG_PATH:-}",
+        "CPATH=$SPACK_VIEW/include:${CPATH:-}",
+        "LIBRARY_PATH=$SPACK_VIEW/lib:$SPACK_VIEW/lib64:${LIBRARY_PATH:-}",
+        "LD_LIBRARY_PATH=$SPACK_VIEW/lib:$SPACK_VIEW/lib64:${LD_LIBRARY_PATH:-}"
+    ]
+)
+```
+
+And rebuild:
+
+```{python}
+definition = recipe_to_definition(recipe)
+SINGULARITY_DEF.write_text(definition)
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+Now, we can see that the environment variables are set:
+
+```{python}
+show_spython(
+    spython_exec(
+        """
+        set -euo pipefail
+        . /opt/spack/share/spack/setup-env.sh
+        cd /work
+        spack env activate -d .
+
+        echo $PATH
+        echo $PKG_CONFIG_PATH
+        echo $CPATH
+        echo $LIBRARY_PATH
+        echo $LD_LIBRARY_PATH
+        echo $TMPDIR
+
+        spack concretize --force
+        #spack install --deprecated --fail-fast -j8 --no-checksum
+        """,
+        image=str(TMP_SANDBOX),
+        bind_project=PROJECT_DIR,
+    ),
+)
+```
+
+If you're feeling bold, you can install the project environment in
+the sandbox — but that will take a while and the sandbox is
+ephemeral.
+
+
+<!-- 
+
+```{python}
+from rse_workbench.activation import write_activation_scripts
+
+write_activation_scripts(PROJECT_DIR, enable_direnv=ENABLE_DIRENV)
+```
+
+The variables mean:
+
+```text
+PATH              finds Spack executables
+PKG_CONFIG_PATH   finds .pc files like libuv.pc
+CPATH             finds headers like zlib.h
+LIBRARY_PATH      finds libraries during linking
+LD_LIBRARY_PATH   finds shared libraries at runtime
+TMPDIR            directs builds to large project-backed temporary space
+```
+
+If `ENABLE_DIRENV = True`, this notebook also writes `.envrc` with:
+
+```bash
+source_env env/activate-system-deps.sh
+```
+
+`direnv` is only a developer convenience layer. The canonical runtime contract
+is still `env/activate-system-deps.sh`. -->
