@@ -1,9 +1,0 @@
----
-title: "Legacy: Base Platform"
-format: gfm
-execute:
-  eval: false
----
-
-This numbered notebook has been superseded by the reusable project workflow in
-`notebooks/templates/rse-workbench-project-template.qmd`.

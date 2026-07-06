@@ -1,0 +1,110 @@
+---
+title: "Build Final SIF & Install"
+format: gfm
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "build_install"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+execute: 
+  eval: false
+---
+
+```{python}
+#| sorting-hat: remove
+from rse_workbench.helpers import show_submitit_job
+from rse_workbench.build_install import install_in_container
+
+```
+
+
+Now that the project has been defined, the platform
+decided on, and the project-specific dependencies have been
+defined, it's time to build the final SIF and install the project environment.
+
+We're going to build the final read-only SIF through Slurm 
+so Singularity has node-local temporary space and enough memory.
+Here's how you build an SBATCH job with `submitit` to build the SIF:
+
+```{python}
+#| sorting-hat: remove
+import submitit
+from pathlib import Path
+import os
+
+executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+executor.update_parameters(
+    timeout_min=SLURM_HOURS * 60,
+    slurm_partition=SLURM_PARTITION,
+    mem_gb=float(SLURM_MEM.rstrip("G")),
+    cpus_per_task=SLURM_CPUS,
+    slurm_job_name=f"build-{PROJECT_NAME}-container",
+    mail_user=SLURM_EMAIL
+)
+```
+
+The build function takes the Singularity definition file and an installation
+string and builds the SIF. It returns the job ID for tracking.
+
+```{python}
+#| sorting-hat: remove
+job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_SIF)
+job.job_id
+```
+
+```{python}
+#| sorting-hat: remove
+result = show_submitit_job(job)
+if result is not None:
+    print(result)
+
+```
+
+The final install function runs inside the built SIF, binds the project as `/work`,
+activates Spack, installs the Spack layer, then runs `rv sync` to
+install the project dependencies. It fails loudly if any required
+step fails.
+
+```{python}
+#| sorting-hat: keep
+INSTALL_RUNTIME_COMMAND = r"""
+set -euo pipefail
+
+df -h /tmp /work
+
+. /opt/spack/share/spack/setup-env.sh
+cd /work
+
+spack env activate -d .
+spack concretize --force
+spack install --deprecated --fail-fast -j8 --no-checksum
+
+rv sync
+"""
+```
+
+```{python}
+#| sorting-hat: remove
+job = executor.submit(
+    install_in_container,
+    project_dir=PROJECT_DIR,
+    singularity_sif=SINGULARITY_SIF,
+    runtime_command=INSTALL_RUNTIME_COMMAND
+)
+job.job_id
+```
+
+```{python}
+#| sorting-hat: remove
+result = show_submitit_job(job)
+if result is not None:
+    print(result)
+```
+
+```{python}
+print(result['message'][0])
+```

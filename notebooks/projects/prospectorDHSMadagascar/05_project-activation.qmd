@@ -8,10 +8,6 @@ execute:
 To test that the project environment is discoverable and
 functional, we use this chapter to test the environment.
 
-```{python}
-from rse_workbench.helpers import show_spython, spython_exec
-```
-
 First, test that `spack` works:
 
 ```{python}

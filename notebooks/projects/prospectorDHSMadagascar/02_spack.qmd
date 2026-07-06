@@ -1,9 +1,0 @@
----
-title: "Legacy: Spack Layer"
-format: gfm
-execute:
-  eval: false
----
-
-This numbered notebook has been superseded by the reusable project workflow.
-Use `rse_workbench.spack` from the new template notebook.
