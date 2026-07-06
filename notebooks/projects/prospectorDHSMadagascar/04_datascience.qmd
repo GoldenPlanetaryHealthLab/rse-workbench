@@ -1,0 +1,153 @@
+---
+title: "Data Science Language Package Layer"
+format: gfm
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "datascience"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+execute: 
+  eval: false
+---
+
+```{python}
+#| sorting-hat: keep
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+```
+
+```{python}
+#| sorting-hat: remove
+from rse_workbench.datascience import (
+    default_pyproject,
+    default_rproject,
+    write_pyproject_toml,
+    write_rproject_toml,
+)
+
+```
+
+The data science language package layer is a set of canonical package dependency 
+files for R and Python. The R package manager `rv` and the Python package 
+manager `uv` are used to manage these dependencies.
+
+`rv` owns R package dependencies in `rproject.toml`. `uv` owns Python package
+dependencies in `pyproject.toml`. These files live in the project tree so they
+travel with the scientific code and are consumed inside `/work`.
+
+First, we define a few default packages:
+
+```{python}
+#| sorting-hat: keep
+DEFAULT_R_PACKAGES = [
+    "box", # we use this for namespacing and dependency injection
+    "remotes",
+    "rprojroot", # always travel with this
+    "stringi",
+    "targets",
+    "tarchetypes",
+    "usethis",
+    "httpgd",
+    "httpuv",
+    "parsermd",
+    "rmarkdown",
+    "skimr",
+    "DiagrammeR",
+    "svglite",
+    "later",
+    "rstudioapi",
+    "dplyr",
+    "languageserver",
+    "here",
+    "fledge",
+    "readr",
+    "stringr",
+    "withr",
+    "readxl",
+    "tidyverse",
+    "websocket",
+    "codetools",
+    "quarto",
+    "rlang",
+    "purrr",
+    "tibble",
+    "devtools",
+    "jsonlite",
+]
+
+DEFAULT_R_GIT_DEPENDENCIES = [
+    {
+        "name": "sess",
+        "git": "https://github.com/REditorSupport/vscode-R",
+        "branch": "master",
+        "directory": "sess",
+    }
+]
+
+DEFAULT_PYTHON_PACKAGES = [
+    "numpy",
+    "pandas",
+    "ipykernel",
+    "jupyterlab",
+]
+```
+
+```{python}
+DEFAULT_R_PACKAGES.extend([
+    "sf",
+    "nanoparquet",
+    "janitor",
+    "lubridate",
+    "frictionless"
+])
+```
+
+We define the full TOML files like so:
+
+```{python}
+#| sorting-hat: remove
+rproject = default_rproject(
+    project_name=PROJECT_NAME,
+    r_version=R_VERSION,
+    packages=DEFAULT_R_PACKAGES,
+    git_dependencies=DEFAULT_R_GIT_DEPENDENCIES
+)
+pyproject = default_pyproject(
+    project_name=PROJECT_NAME,
+    python_version=PYTHON_VERSION,
+    packages=DEFAULT_PYTHON_PACKAGES
+)
+```
+
+
+
+
+```{python}
+#| sorting-hat: remove
+write_rproject_toml(RPROJECT_TOML_PATH, rproject)
+write_pyproject_toml(PYPROJECT_TOML_PATH, pyproject)
+```
+
+It's at this stage that you might want to double back on
+the platform recipe and add any additional system dependencies 
+that are required for project packages. You can do this for the 
+R TOML like so:
+
+
+```r
+pkgs <- toml::parse_toml(readLines("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors/<PROJECT>/rproject.toml"))$project$dependencies
+pkgs[[length(pkgs)]] <- NULL
+pak::pkg_sysreqs(unlist(pkgs), sysreqs_platform = "rockylinux")
+```
+
+If any system dependencies come up here, you
+can add them either to the platform recipe or to the 
+`DEFAULT_SYSTEM_SPECS` list in the spack notebook.
+
+In the next chapter, you'll test out the project activation.

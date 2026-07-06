@@ -1,9 +1,0 @@
----
-title: "Legacy: Build Container"
-format: gfm
-execute:
-  eval: false
----
-
-This numbered notebook has been superseded by the reusable project workflow.
-The final install command now fails loudly and lives in `rse_workbench.project`.
