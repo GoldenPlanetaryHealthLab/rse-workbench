@@ -37,7 +37,7 @@ def compose_platform_recipe(
     base_image: str,
     installables: list[Installable] | None = None,
     env_vars: dict[str, str] | None = None
-) -> tuple[Recipe, str]:
+) -> Recipe:
     """Build a Singularity definition for the reusable platform image."""
 
     recipe = Recipe()
