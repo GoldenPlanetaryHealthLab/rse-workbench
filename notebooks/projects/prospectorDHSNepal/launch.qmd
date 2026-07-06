@@ -1,0 +1,13 @@
+---
+title: "Legacy: Launch VSCode"
+format: gfm
+execute:
+  eval: false
+---
+
+This launch notebook has been superseded by the reusable project workflow.
+
+Use `notebooks/templates/rse-workbench-project-template.qmd` to generate a
+project-local `environment.qmd`, then run the "Launch VSCode / Runtime Entry
+Point" chapter. The generated launch script now uses
+`rse_workbench.slurm.write_launch_script()` and fails loudly on install errors.

@@ -1,0 +1,17 @@
+---
+title: "Legacy: Miscellaneous Functions"
+format: gfm
+execute:
+  eval: false
+---
+
+This numbered notebook has been superseded by the reusable project workflow.
+
+Create a current notebook with:
+
+```bash
+cp notebooks/templates/rse-workbench-project-template.qmd notebooks/projects/prospectorDHSMadagascar/environment.qmd
+```
+
+Then edit the Project Contract chapter. Helper logic now lives in
+`src/rse_workbench/`.

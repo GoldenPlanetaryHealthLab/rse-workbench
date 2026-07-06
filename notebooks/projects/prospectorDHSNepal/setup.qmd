@@ -1,0 +1,19 @@
+---
+title: "Legacy: Project Setup"
+subtitle: "Prospector: DHSNepal"
+format: gfm
+execute:
+  eval: false
+---
+
+This environment setup notebook has been superseded by the reusable project
+workflow.
+
+Create a current notebook with:
+
+```bash
+cp notebooks/templates/rse-workbench-project-template.qmd notebooks/projects/prospectorDHSNepal/environment.qmd
+```
+
+Then edit the Project Contract chapter. Helper logic now lives in
+`src/rse_workbench/`.

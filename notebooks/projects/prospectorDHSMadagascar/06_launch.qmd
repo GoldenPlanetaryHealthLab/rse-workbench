@@ -1,0 +1,9 @@
+---
+title: "Legacy: Launch VSCode"
+format: gfm
+execute:
+  eval: false
+---
+
+This numbered notebook has been superseded by the reusable project workflow.
+Launch script generation now lives in `rse_workbench.slurm`.

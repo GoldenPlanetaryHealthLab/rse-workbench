@@ -1,0 +1,33 @@
+project:
+  type: book
+  output-dir: docs
+
+book:
+  title: "RSE Workbench"
+  subtitle: "A template for Developing Reproducible Project Environments"
+  author: "Tinashe Tapera"
+  date: "8/18/2021"
+  chapters:
+    - index.qmd
+    - about.qmd
+    - part: "Template"
+      chapters:
+        - notebooks/rse_workbench/00_misc.qmd
+        - notebooks/rse_workbench/01_project-contract.qmd
+        - notebooks/rse_workbench/02_platform-recipe.qmd
+        - notebooks/rse_workbench/03_sci-sysdeps.qmd
+        - notebooks/rse_workbench/04_datascience.qmd
+        - notebooks/rse_workbench/05_project-activation.qmd
+        - notebooks/rse_workbench/06_build-launch.qmd
+
+format:
+  html:
+    theme:
+      - cosmo
+      - brand
+    css: styles.css
+    toc: true
+
+execute: 
+  eval: false
+

@@ -2,4 +2,20 @@
 name = "rse-workbench"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pytask>=0.6.0",
+    "pyprojroot>=0.3.0",
+    "pyyaml>=6.0.0",
+    "rich>=13.0.0",
+    "simple-slurm>=0.3.6",
+    "spython>=0.3.14",
+    "submitit>=1.5.0",
+    "tomli-w>=1.0.0",
+]
+
+[build-system]
+requires = ["uv_build"] 
+build-backend = "uv_build"
+
+[tool.pytask.ini_options]
+paths = ["src/projects/prospectorDHSNepal/tasks"] 
