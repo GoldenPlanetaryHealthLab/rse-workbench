@@ -16,8 +16,8 @@ execute:
 
 ```{python}
 #| sorting-hat: remove
-# from rse_workbench.config import show_submitit_job
-from rse_workbench.build_install import install_in_container, build_container
+from rse_workbench.helpers import show_submitit_job
+from rse_workbench.build_install import install_in_container
 
 ```
 
@@ -87,14 +87,13 @@ rv sync
 """
 ```
 
-
 ```{python}
 #| sorting-hat: remove
 job = executor.submit(
     install_in_container,
     project_dir=PROJECT_DIR,
     singularity_sif=SINGULARITY_SIF,
-    runtime_command=INSTALL_RUNTIME_COMMAND,
+    runtime_command=INSTALL_RUNTIME_COMMAND
 )
 job.job_id
 ```
@@ -106,9 +105,8 @@ if result is not None:
     print(result)
 ```
 
-
 ```{python}
-print(result['message'][0])
+print(result['message'][1])
 ```
 
 When it's time to work on the project, you'll launch

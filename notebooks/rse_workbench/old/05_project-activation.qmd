@@ -69,8 +69,6 @@ set -euo pipefail
 
 unset R_HOME
 
-export PATH="/usr/local/bin:/opt/spack/bin:/usr/bin:/usr/sbin:/sbin:/bin"
-
 export SPACK_DISABLE_LOCAL_CONFIG=true
 export SPACK_USER_CONFIG_PATH=/tmp/spack-user-config
 export SPACK_USER_CACHE_PATH=/tmp/spack-user-cache
@@ -151,30 +149,18 @@ should remain a wrapper around the canonical activation script, not the
 canonical source of truth.
 
 ```{python}
-from textwrap import dedent
-
 ENABLE_DIRENV = True
-
-launch_script_path = PROJECT_DIR / "slurm" / "launch" / "launch_container.sbatch"
-launch_log_dir = PROJECT_DIR / "slurm" / "launch" / "logs"
 
 if ENABLE_DIRENV:
     envrc = PROJECT_DIR / ".envrc"
+    envrc.write_text(f"""
+    if [ -n "${SINGULARITY_CONTAINER:-}" ] || [ -n "${APPTAINER_CONTAINER:-}" ]; then
+        source /work/env/activate.sh
+    fi
 
-    envrc.write_text(
-        dedent(f"""\
-        export LAUNCHSCRIPT="{launch_script_path}"
-        export LAUNCHLOGDIR="{launch_log_dir}"
-
-        export LATEST_LAUNCH_ERR="$(ls -t "$LAUNCHLOGDIR"/launch-*.err 2>/dev/null | head -n1)"
-        export LATEST_LAUNCH_OUT="$(ls -t "$LAUNCHLOGDIR"/launch-*.out 2>/dev/null | head -n1)"
-
-        if [ -n "${{SINGULARITY_CONTAINER:-}}" ] || [ -n "${{APPTAINER_CONTAINER:-}}" ]; then
-            source /work/env/activate.sh
-            unset R_HOME
-        fi
-        """)
-    )
+    LAUNCHSCRIPT="{PROJECT_DIR}/slurm/launch/launch_container.sbatch"
+    """)
+    envrc
 ```
 
 The variables mean:

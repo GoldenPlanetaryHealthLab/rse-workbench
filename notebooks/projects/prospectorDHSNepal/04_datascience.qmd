@@ -78,7 +78,7 @@ DEFAULT_R_PACKAGES = [
     "purrr",
     "tibble",
     "devtools",
-    "jsonlite"
+    "jsonlite",
 ]
 
 DEFAULT_R_GIT_DEPENDENCIES = [
@@ -104,9 +104,7 @@ DEFAULT_R_PACKAGES.extend([
     "nanoparquet",
     "janitor",
     "lubridate",
-    "frictionless",
-    "pkgsite",
-    "rdhs"
+    "frictionless"
 ])
 ```
 

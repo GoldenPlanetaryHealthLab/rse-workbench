@@ -1,0 +1,74 @@
+---
+title: "02 Build Platform"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook builds the platform image and tests only the platform contract.
+
+Do not mount `/work`. Do not activate a project Spack environment. Do not run `rv sync`, `quarto check`, or VS Code tunnel commands.
+
+```{python}
+from pathlib import Path
+import os
+from spython.main import Client
+from rse_workbench.helpers import spython_exec, show_spython
+```
+
+```{python}
+TMP_SANDBOX = Path(f"/tmp/{os.environ['USER']}-{PROJECT_NAME}-platform-sandbox")
+TMP_SANDBOX
+```
+
+```{python}
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+## Platform-only validation
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+
+echo "PATH=$PATH"
+which spack
+which python3
+which rv
+which uv
+which code
+which quarto
+
+spack --version
+python3 --version
+rv --version
+uv --version
+code --version
+quarto --version
+''',
+        image=TMP_SANDBOX,
+        options=["--no-home"],
+    ),
+    tail=120,
+)
+```
+
+Expected result:
+
+```text
+spack works
+python3 works
+rv works
+uv works
+code works
+quarto works
+```
+
+Stop here if the platform contract fails.

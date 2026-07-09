@@ -1,7 +1,4 @@
-#' ---
-#' title: 9  Build Final SIF & Install
-#' ---
-#' 
+from __future__ import annotations
 
 def build_container(singularity_def, singularity_sif):
     from spython.main import Client
@@ -34,7 +31,6 @@ def build_container(singularity_def, singularity_sif):
 INSTALL_RUNTIME_COMMAND = r"""
 set -euo pipefail
 
-echo "TMPDIR=$TMPDIR"
 df -h /tmp /work
 
 . /opt/spack/share/spack/setup-env.sh
@@ -47,8 +43,6 @@ spack install --deprecated --fail-fast -j8 --no-checksum
 rv sync
 """
 
-
-from __future__ import annotations
 
 from pathlib import Path
 from typing import Any

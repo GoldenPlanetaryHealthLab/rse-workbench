@@ -1,0 +1,44 @@
+---
+title: "08 Validate R From Spack"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook validates the R installation after the Spack layer is installed.
+
+Do not install R packages here.
+
+```{python}
+from rse_workbench.helpers import spython_exec, show_spython
+```
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+source /work/env/activate.sh
+
+which R
+which Rscript
+R --version
+Rscript -e 'cat("R.home=", R.home(), "\n", sep=""); print(.libPaths()); print(capabilities()[c("cairo", "png", "jpeg", "tiff")])'
+''',
+        image=SINGULARITY_SIF,
+        options=["--no-home"],
+        bind_project=PROJECT_DIR,
+    ),
+    tail=160,
+)
+```
+
+Expected result:
+
+```text
+R starts
+Rscript starts
+cairo, png, jpeg, and tiff capabilities are TRUE
+```
+
+Stop here if R capabilities are wrong.

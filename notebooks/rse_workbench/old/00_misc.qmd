@@ -1,3 +1,29 @@
+---
+title: "Miscellaneous Helper Functions"
+format: gfm
+execute:
+  eval: false
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "helpers"
+    include-yaml: false
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+---
+
+This notebook collects miscellaneous functions that are useful for the RSE 
+Workbench. 
+
+Here are a couple of functions that allow us to quickly
+build our singularity image and iterate on it by executing commands inside the 
+image. These functions are:
+
+```{python}
+#| sorting-hat: keep
 from __future__ import annotations
 
 from pathlib import Path
@@ -98,7 +124,13 @@ def show_spython(result: Any, *, tail: int | None = None) -> dict[str, Any]:
 
     return normalized
 
+```
 
+
+To see the ongoing result of a job with `submitit`, we can use the following helper function:
+
+```{python}
+#| sorting-hat: keep
 """Slurm display and launch-script helpers."""
 
 from pathlib import Path
@@ -127,3 +159,4 @@ def show_submitit_job(job: Any) -> Any:
         return None
 
     return job.result()
+```

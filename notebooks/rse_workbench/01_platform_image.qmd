@@ -1,0 +1,167 @@
+---
+title: "01 Platform Image"
+format: gfm
+execute:
+  eval: false
+filters:
+  - sorting-hat
+  - ripper
+extensions:
+  ripper:
+    output-name: "platform_contract"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+    keep: python
+---
+
+This notebook defines the platform image. It should only answer:
+
+> What minimal computer does this project run on?
+
+The platform image must not know about `/work/.spack-env/view`, `R_HOME`, `rv` libraries, Quarto project extensions, or project-specific activation.
+
+```{python}
+from rse_workbench.platform_contract import Installable
+from rse_workbench.platform_contract import compose_platform_recipe, recipe_to_definition
+```
+
+## Platform tools
+
+```{python}
+#| sorting-hat: remove
+code = Installable(
+    name="code",
+    kind="binary",
+    path="/usr/local/bin/code",
+    commands=[
+        r'''
+tmpdir="$(mktemp -d)"
+cd "$tmpdir"
+curl -L --fail --show-error --output vscode_cli.tar.gz "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64"
+tar -xzf vscode_cli.tar.gz
+CODE_BIN="$(find "$tmpdir" -type f -name code | head -n 1)"
+test -n "$CODE_BIN"
+test -x "$CODE_BIN" || chmod +x "$CODE_BIN"
+install -m 0755 "$CODE_BIN" /usr/local/bin/code
+/usr/local/bin/code --version
+'''
+    ],
+    test=["command -v code", "code --version"],
+)
+
+rv = Installable(
+    name="rv",
+    kind="binary",
+    path="/usr/local/bin/rv",
+    commands=[
+        r'''
+curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+RV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+if [ -z "$RV_BIN" ]; then
+  RV_BIN="$(find / -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+fi
+test -n "$RV_BIN"
+install -m 0755 "$RV_BIN" /usr/local/bin/rv
+'''
+    ],
+    test=["command -v rv", "rv --version"],
+)
+
+uv = Installable(
+    name="uv",
+    kind="binary",
+    path="/usr/local/bin/uv",
+    commands=[
+        r'''
+curl -LsSf https://astral.sh/uv/install.sh | sh
+UV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/uv' -type f 2>/dev/null | head -n 1)"
+if [ -z "$UV_BIN" ]; then
+  UV_BIN="$(find / -path '*/.local/bin/uv' -type f 2>/dev/null | head -n 1)"
+fi
+test -n "$UV_BIN"
+install -m 0755 "$UV_BIN" /usr/local/bin/uv
+'''
+    ],
+    test=["command -v uv", "uv --version"],
+)
+
+quarto = Installable(
+    name="quarto",
+    kind="binary",
+    path="/usr/local/bin/quarto",
+    commands=[
+        r'''
+QUARTO_VERSION="1.9.38"
+if [ "$(uname -m)" = "aarch64" ]; then
+  QUARTO_ARCH="arm64"
+else
+  QUARTO_ARCH="amd64"
+fi
+
+mkdir -p "/opt/quarto/${QUARTO_VERSION}"
+curl -o quarto.tar.gz -L \
+  "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${QUARTO_ARCH}.tar.gz"
+tar -zxvf quarto.tar.gz -C "/opt/quarto/${QUARTO_VERSION}" --strip-components=1
+rm quarto.tar.gz
+test -x "/opt/quarto/${QUARTO_VERSION}/bin/quarto"
+ln -sf "/opt/quarto/${QUARTO_VERSION}/bin/quarto" /usr/local/bin/quarto
+'''
+    ],
+    test=["command -v quarto", "quarto --version"],
+)
+```
+
+`arf` is useful but not part of the required platform contract. Keep it optional until embedded R is stable.
+
+```{python}
+#| sorting-hat: remove
+arf = Installable(
+    name="arf",
+    kind="cargo",
+    path="/usr/local/bin/arf",
+    commands=[
+        r'''
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/eitsupi/arf/releases/latest/download/arf-console-installer.sh | sh
+ARF_BIN="$(find /root/.cargo/bin /home -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+if [ -z "$ARF_BIN" ]; then
+  ARF_BIN="$(find / -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+fi
+test -n "$ARF_BIN"
+install -m 0755 "$ARF_BIN" /usr/local/bin/arf
+'''
+    ],
+    test=["command -v arf", "arf --version"],
+)
+```
+
+## Compose definition
+
+```{python}
+#| sorting-hat: remove
+recipe = compose_platform_recipe(
+    base_image=BASE_IMAGE,
+    installables=[code, rv, uv, quarto],
+    dnf_update=[
+        "dnf install -y ca-certificates tar gzip which findutils file shadow-utils",
+        "dnf install -y epel-release",
+        "dnf install -y python3 python3-pip",
+        "mkdir -p /work /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache",
+    ],
+)
+
+recipe.environ.extend(
+    [
+        "PATH=/usr/local/bin:/opt/spack/bin:/usr/bin:/usr/sbin:/sbin:/bin",
+        "SPACK_DISABLE_LOCAL_CONFIG=true",
+        "SPACK_USER_CONFIG_PATH=/tmp/spack-user-config",
+        "SPACK_USER_CACHE_PATH=/tmp/spack-user-cache",
+        "SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache",
+    ]
+)
+
+definition = recipe_to_definition(recipe)
+SINGULARITY_DEF.write_text(definition)
+print(definition)
+```
+
+Stop here. The next notebook builds and tests this image without mounting `/work`.

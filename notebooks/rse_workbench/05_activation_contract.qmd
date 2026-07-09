@@ -1,0 +1,80 @@
+---
+title: "05 Activation Contract"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook writes the canonical project runtime activation script.
+
+The activation script prepares the runtime environment. It does not install packages.
+
+Canonical runtime contract:
+
+```bash
+source /work/env/activate.sh
+```
+
+```{python}
+from textwrap import dedent
+```
+
+```{python}
+ENV_DIR.mkdir(parents=True, exist_ok=True)
+FILTER_BIN_DIR.mkdir(parents=True, exist_ok=True)
+
+activate_script = r'''
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PATH="/usr/local/bin:/opt/spack/bin:/usr/bin:/usr/sbin:/sbin:/bin"
+
+export SPACK_DISABLE_LOCAL_CONFIG=true
+export SPACK_USER_CONFIG_PATH=/tmp/spack-user-config
+export SPACK_USER_CACHE_PATH=/tmp/spack-user-cache
+export SPACK_MISC_CACHE_PATH=/tmp/spack-misc-cache
+
+. /opt/spack/share/spack/setup-env.sh
+
+cd /work
+spack env activate -d .
+
+export SPACK_VIEW=/work/.spack-env/view
+export PATH="/work/env/bin:${SPACK_VIEW}/bin:${PATH}"
+export PKG_CONFIG_PATH="${SPACK_VIEW}/lib/pkgconfig:${SPACK_VIEW}/lib64/pkgconfig:${SPACK_VIEW}/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+export CPATH="${SPACK_VIEW}/include:${CPATH:-}"
+export LIBRARY_PATH="${SPACK_VIEW}/lib:${SPACK_VIEW}/lib64:${LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${SPACK_VIEW}/lib:${SPACK_VIEW}/lib64:${LD_LIBRARY_PATH:-}"
+
+unset R_HOME
+'''
+
+ACTIVATE_SCRIPT.write_text(dedent(activate_script).lstrip())
+ACTIVATE_SCRIPT.chmod(0o755)
+ACTIVATE_SCRIPT
+```
+
+## Optional host-side `.envrc`
+
+`.envrc` is for host-side convenience only. It should not activate the container runtime on the host.
+
+```{python}
+from textwrap import dedent
+
+if ENABLE_DIRENV:
+    envrc = PROJECT_DIR / ".envrc"
+    envrc.write_text(
+        dedent(
+            f'''\
+            export LAUNCHSCRIPT="{LAUNCH_SCRIPT}"
+            export LAUNCHLOGDIR="{LAUNCH_LOG_DIR}"
+            export LATEST_LAUNCH_ERR="$(ls -t "$LAUNCHLOGDIR"/launch-*.err 2>/dev/null | head -n1)"
+            export LATEST_LAUNCH_OUT="$(ls -t "$LAUNCHLOGDIR"/launch-*.out 2>/dev/null | head -n1)"
+            '''
+        )
+    )
+    envrc.chmod(0o644)
+    envrc
+```
+
+Stop here. The next notebook tests activation with the project mounted.

@@ -1,0 +1,92 @@
+---
+title: "11 Launch VS Code Tunnel"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook writes the VS Code launch script.
+
+The launch script should not install packages. It assumes prior notebooks have already installed and validated the environment.
+
+```{python}
+from simple_slurm import Slurm
+from pathlib import Path
+```
+
+```{python}
+runtime_command = [
+    "set -euo pipefail",
+    "source /work/env/activate.sh",
+    "cd /work",
+    "which code",
+    "code tunnel --accept-server-license-terms --name vscode",
+]
+runtime_command
+```
+
+```{python}
+slurm = Slurm(
+    job_name=f"launch-{PROJECT_NAME}-container",
+    cpus_per_task=SLURM_CPUS,
+    mem=SLURM_MEM,
+    time="04:00:00",
+    partition=SLURM_PARTITION,
+    mail_user=SLURM_EMAIL,
+    output=str(LAUNCH_LOG_DIR / "launch-%j.out"),
+    error=str(LAUNCH_LOG_DIR / "launch-%j.err"),
+)
+
+slurm.add_cmd("set -o errexit -o nounset -o pipefail")
+slurm.add_cmd(f'PROJECT_DIR="{PROJECT_DIR}"')
+slurm.add_cmd('SIF="${PROJECT_DIR}/.devcontainer/Singularity.sif"')
+slurm.add_cmd('CONTAINER_HOME="${PROJECT_DIR}/.container-home"')
+slurm.add_cmd('CONTAINER_TMP="${PROJECT_DIR}/.container-tmp"')
+slurm.add_cmd('mkdir -p "${PROJECT_DIR}/slurm/launch/logs"')
+slurm.add_cmd('mkdir -p "${CONTAINER_HOME}" "${CONTAINER_TMP}"')
+slurm.add_cmd('cd "${PROJECT_DIR}"')
+```
+
+```{python}
+slurm.add_cmd(r'''
+echo "=================== Slurm sitrep =================="
+echo "Date:         $(date)"
+echo "Host:         $(hostname)"
+echo "User:         $(whoami)"
+echo "Job ID:       ${SLURM_JOB_ID}"
+echo "Project:      ${PROJECT_DIR}"
+echo "SIF:          ${SIF}"
+echo "Home:         ${CONTAINER_HOME}"
+echo "Tmp:          ${CONTAINER_TMP}"
+echo "==================================================="
+
+module purge
+''')
+```
+
+```{python}
+container_command = " && ".join(runtime_command)
+
+slurm.add_cmd(
+    r'''singularity exec \
+  --no-home \
+  --bind "${PROJECT_DIR}:/work" \
+  --home "${CONTAINER_HOME}:/home/rse" \
+  --bind "${CONTAINER_TMP}:/tmp" \
+  "${SIF}" \
+  bash --noprofile --norc -lc ''' + repr(container_command)
+)
+```
+
+```{python}
+LAUNCH_SCRIPT.parent.mkdir(parents=True, exist_ok=True)
+LAUNCH_SCRIPT.write_text(slurm.script(convert=False))
+LAUNCH_SCRIPT.chmod(0o755)
+print(LAUNCH_SCRIPT.read_text())
+```
+
+Launch manually from the project directory:
+
+```bash
+sbatch "$LAUNCHSCRIPT"
+```

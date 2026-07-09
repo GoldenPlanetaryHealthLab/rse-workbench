@@ -1,8 +1,3 @@
-#' ---
-#' title: 6  Scientific System Dependency Layer with Spack
-#' ---
-#' 
-
 #from rse_workbench.sci_sysdeps import default_spack_env, write_spack_yaml
 
 

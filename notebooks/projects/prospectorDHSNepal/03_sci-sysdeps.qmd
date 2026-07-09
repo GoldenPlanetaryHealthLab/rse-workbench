@@ -86,7 +86,8 @@ DEFAULT_SYSTEM_SPECS.extend([
     "udunits",
     "libuv",
     "zlib",
-    "r-udunits2"
+    "r-udunits2",
+    "rdhs"
 ])
 
 spack_env = default_spack_env(
@@ -95,12 +96,6 @@ spack_env = default_spack_env(
     default_specs=DEFAULT_SYSTEM_SPECS
 )
 spack_env
-```
-
-We're modifying R to include graphic support:
-
-```{python}
-spack_env["spack"]["specs"][0] = 'r@4.5.1 +X'
 ```
 
 When you're ready to write it out to file, you can use the `write_spack_yaml()` 

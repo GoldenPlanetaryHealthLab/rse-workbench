@@ -1,8 +1,3 @@
-#' ---
-#' title: 7  Data Science Language Package Layer
-#' ---
-#' 
-
 from __future__ import annotations
 
 from pathlib import Path

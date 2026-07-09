@@ -25,20 +25,18 @@ section makes use of this to get the project started:
 from pathlib import Path
 from pyprojroot import here
 
-PROJECT_NAME = "prospectorDHSMadagascar" # FILL ME IN
+PROJECT_NAME = "prospectorDHSNepal" # FILL ME IN
 assert PROJECT_NAME, "Please fill in the project name."
 PROJECT_DIR = Path("/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors") / PROJECT_NAME
 WORKBENCH_DIR = here()
 RUNTIME_DIR = WORKBENCH_DIR / "projects" / PROJECT_NAME
 
-BASE_IMAGE = "docker://spack/rockylinux9:develop"
+BASE_IMAGE = "docker://spack/rockylinux8:develop"
 
 R_VERSION = "4.5.1"
 PYTHON_VERSION = "3.14"
 
-ENABLE_DIRENV = True
-ENV_DIR = PROJECT_DIR / "env"
-ACTIVATE_SCRIPT = ENV_DIR / "activate.sh"
+ENABLE_DIRENV = False
 ```
 
 We can dedicate a section to the Slurm variables for the typical
@@ -47,9 +45,9 @@ runtime while we're building the project:
 ```{python}
 #| sorting-hat: remove
 SLURM_PARTITION = "hsph"
-SLURM_CPUS = 12
+SLURM_CPUS = 8
 SLURM_MEM = "32G"
-SLURM_HOURS = 2 # this is the project build time, not the runtime for a single job
+SLURM_HOURS = 1 # this is the project build time, not the runtime for a single job
 SLURM_EMAIL = "aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com" # aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com
 ```
 

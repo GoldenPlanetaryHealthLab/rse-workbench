@@ -7,6 +7,7 @@ filters:
 extensions:
   ripper:
     output-name: "build_install"
+    include-yaml: false
     output-dir: "../../src/rse_workbench"
   sorting-hat:
         keep: python
@@ -52,6 +53,8 @@ string and builds the SIF. It returns the job ID for tracking.
 
 ```{python}
 #| sorting-hat: keep
+from __future__ import annotations
+
 def build_container(singularity_def, singularity_sif):
     from spython.main import Client
     from pathlib import Path
@@ -104,7 +107,6 @@ step fails.
 INSTALL_RUNTIME_COMMAND = r"""
 set -euo pipefail
 
-echo "TMPDIR=$TMPDIR"
 df -h /tmp /work
 
 . /opt/spack/share/spack/setup-env.sh
@@ -120,8 +122,6 @@ rv sync
 
 ```{python}
 #| sorting-hat: keep
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 
@@ -185,3 +185,129 @@ if result is not None:
     print(result)
 ```
 
+When it's time to work on the project, you'll launch
+a container with a specific runtime command to
+run a VSCode tunnel in a container, with your
+project bound to `/work`. The runtime command will 
+also activate the project Spack environment and 
+install/update project dependencies as needed.
+
+```{python}
+#| sorting-hat: remove
+runtime_command = [
+    "export SPACK_DISABLE_LOCAL_CONFIG=true",
+    ". /opt/spack/share/spack/setup-env.sh",
+    "cd /work",
+    "spack env activate -d .",
+    "spack concretize",
+    "spack install --deprecated --fail-fast -j12 --no-checksum",
+    "(rv sync || true)",
+    "(code tunnel unregister || true)",
+    "exec code tunnel --accept-server-license-terms --log trace --verbose --name vscode",
+]
+runtime_command
+```
+
+We can write the runtime command to our project-local 
+`launch.sh` script. We'll use `simple_slurm`
+for this. First, set the job params:
+
+```{python}
+#| sorting-hat: remove
+from simple_slurm import Slurm
+
+mem = {
+    "small": "4G",
+    "medium": "8G",
+    "big": "32G",
+}
+
+n_hours = 4
+n_cpus = 12
+
+slurm = Slurm(
+    job_name=f"launch-{PROJECT_NAME}-container", 
+    cpus_per_task=n_cpus, 
+    mem=mem["big"], 
+    time=f"0{n_hours}:00:00", 
+    partition="hsph",
+    mail_user="aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com",
+    output=str(PROJECT_DIR / "slurm" / "launch" / "logs" / "launch-%j.out"),    
+    error=str(PROJECT_DIR / "slurm" / "launch" / "logs" / "launch-%j.err")
+)
+
+print(slurm)
+
+slurm.add_cmd("set -o errexit -o nounset -o pipefail")
+```
+
+Next, set the project level variabless
+
+```{python}
+#| sorting-hat: remove
+slurm.add_cmd(f"PROJECT_DIR=${{PROJECT_DIR}}")
+slurm.add_cmd(f"SIF=${{PROJECT_DIR}}/.devcontainer/Singularity.sif")
+slurm.add_cmd(f"CONTAINER_HOME=${{PROJECT_DIR}}/.container-home")
+slurm.add_cmd(f"CONTAINER_TMP=${{PROJECT_DIR}}/.container-tmp")
+slurm.add_cmd(f"mkdir -p ${{PROJECT_DIR}}/slurm/launch/logs")
+slurm.add_cmd(f"mkdir -p ${{CONTAINER_HOME}}")
+slurm.add_cmd(f"mkdir -p ${{CONTAINER_TMP}}")
+slurm.add_cmd(f"cd ${{PROJECT_DIR}}")
+```
+
+Next, add some logging to the launch script:
+
+```{python}
+#| sorting-hat: remove
+slurm.add_cmd("""
+echo "=================== Slurm sitrep =================="
+echo "Date:         $(date)"
+echo "Host:         $(hostname)"
+echo "User:         $(whoami)"
+echo "Job ID:       ${SLURM_JOB_ID}"
+echo "Project:      ${PROJECT_DIR}"
+echo "SIF:          ${SIF}"
+echo "Home:         ${CONTAINER_HOME}"
+echo "Tmp:          ${CONTAINER_TMP}"
+echo "==================================================="
+
+module purge
+""")
+```
+
+Finally, the runtime command:
+
+```{python}
+#| sorting-hat: remove
+slurm.add_cmd(r"""
+singularity exec \
+  --bind ${PROJECT_DIR}:/work \
+  --home ${PROJECT_DIR}/.container-home:/home/rse \
+  --bind ${PROJECT_DIR}/.container-tmp:/tmp \
+  ${SIF} \
+  bash --noprofile --norc -lc '
+""" + " && ".join(runtime_command) + "'")
+```
+
+```{python}
+#| sorting-hat: remove
+print(slurm)
+```
+
+And we write this to file:
+
+```{python}
+#| sorting-hat: remove
+LAUNCH_SCRIPT = PROJECT_DIR / "slurm" / "launch" / "launch_container.sbatch"
+
+with open(LAUNCH_SCRIPT, "w") as f:
+    script = slurm.script(convert=False)
+    f.write(script)
+    
+LAUNCH_SCRIPT.chmod(0o755)
+```
+
+```{python}
+#| sorting-hat: remove
+Path(LAUNCH_SCRIPT).exists()
+```

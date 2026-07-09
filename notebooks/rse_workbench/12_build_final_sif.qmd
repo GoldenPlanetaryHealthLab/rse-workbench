@@ -1,0 +1,41 @@
+---
+title: "12 Build Final SIF"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook builds the final read-only SIF from the validated platform definition.
+
+It does not install project packages.
+
+```{python}
+import submitit
+from rse_workbench.helpers import show_submitit_job
+from rse_workbench.build_install import build_container
+```
+
+```{python}
+executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+executor.update_parameters(
+    timeout_min=SLURM_HOURS * 60,
+    slurm_partition=SLURM_PARTITION,
+    mem_gb=float(SLURM_MEM.rstrip("G")),
+    cpus_per_task=SLURM_CPUS,
+    slurm_job_name=f"build-{PROJECT_NAME}-container",
+    mail_user=SLURM_EMAIL,
+)
+```
+
+```{python}
+job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_SIF)
+job.job_id
+```
+
+```{python}
+result = show_submitit_job(job)
+if result is not None:
+    print(result)
+```
+
+After this succeeds, run the validation notebooks against `SINGULARITY_SIF`.

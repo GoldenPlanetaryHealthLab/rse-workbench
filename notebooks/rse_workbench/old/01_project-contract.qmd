@@ -7,6 +7,7 @@ filters:
 extensions:
   ripper:
     output-name: "project_contract"
+    include-yaml: false
     output-dir: "../../src/rse_workbench"
   sorting-hat:
         keep: python
@@ -36,7 +37,9 @@ BASE_IMAGE = "docker://spack/rockylinux8:develop"
 R_VERSION = "4.5.1"
 PYTHON_VERSION = "3.14"
 
-ENABLE_DIRENV = False
+ENABLE_DIRENV = True
+ENV_DIR = PROJECT_DIR / "env"
+ACTIVATE_SCRIPT = ENV_DIR / "activate.sh"
 ```
 
 We can dedicate a section to the Slurm variables for the typical
