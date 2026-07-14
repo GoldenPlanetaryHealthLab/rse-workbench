@@ -10,7 +10,7 @@ This notebook builds the final read-only SIF from the validated platform definit
 
 ```{python}
 import submitit
-from rse_workbench.helpers import show_submitit_job, spython_exec, show_spython
+from rse_workbench.helpers import show_submitit_job
 from rse_workbench.build_install import build_container
 ```
 
@@ -406,25 +406,3 @@ Render
 The first failing step identifies the boundary where integration has broken.
 
 There is no benefit to debugging components beyond the first failed contract.
-
-
-```{python}
-show_spython(
-    spython_exec(
-        command=r'''
-set -euo pipefail
-echo "PATH=$PATH"
-cd /work
-source /work/env/activate.sh
-
-quarto render dev
-''',
-        image=SINGULARITY_IMAGE,
-        options=[
-            "--home", f"{CONTAINER_HOME}:/home/rse",
-            "--bind", f"{CONTAINER_TMP}:/tmp",
-        ],
-        bind_project=PROJECT_DIR,
-    ),
-)   
-```

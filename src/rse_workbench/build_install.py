@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-def build_container(singularity_def, singularity_sif):
+def build_container(singularity_def, SINGULARITY_IMAGE):
     from spython.main import Client
     from pathlib import Path
     import os
@@ -20,7 +20,7 @@ def build_container(singularity_def, singularity_sif):
     os.environ["APPTAINER_CACHEDIR"] = str(singularity_cache)
 
     return Client.build(
-        image=str(singularity_sif),
+        image=str(SINGULARITY_IMAGE),
         recipe=str(singularity_def),
         options=["--fakeroot", "--force"],
         sudo=False,
@@ -49,7 +49,7 @@ from typing import Any
 
 def install_in_container(
     project_dir: Path,
-    singularity_sif: Path,
+    SINGULARITY_IMAGE: Path,
     runtime_command: str = INSTALL_RUNTIME_COMMAND,
 ) -> dict[str, Any]:
     """Install the project Spack and data science environments inside the final SIF."""
@@ -59,7 +59,7 @@ def install_in_container(
     import os
 
     project_dir = Path(project_dir)
-    singularity_sif = Path(singularity_sif)
+    SINGULARITY_IMAGE = Path(SINGULARITY_IMAGE)
 
     container_home = project_dir / ".container-home"
     container_tmp = project_dir / ".container-tmp"
@@ -82,7 +82,7 @@ def install_in_container(
     ]
 
     return Client.execute(
-        image=str(singularity_sif),
+        image=str(SINGULARITY_IMAGE),
         command=["bash", "--noprofile", "--norc", "-lc", runtime_command],
         options=options,
         sudo=False,

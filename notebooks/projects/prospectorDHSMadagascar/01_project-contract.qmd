@@ -60,7 +60,7 @@ notebook, the project tree, Slurm, and the container.
 ```{python}
 #| sorting-hat: remove
 SINGULARITY_DEF = PROJECT_DIR / ".devcontainer" / "Singularity.def"
-SINGULARITY_SIF = PROJECT_DIR / ".devcontainer" / "Singularity.sif"
+SINGULARITY_IMAGE = PROJECT_DIR / ".devcontainer" / "Singularity.sif"
 SPACK_YAML_PATH = PROJECT_DIR / "spack.yaml"
 RPROJECT_TOML_PATH = PROJECT_DIR / "rproject.toml"
 PYPROJECT_TOML_PATH = PROJECT_DIR / "pyproject.toml"

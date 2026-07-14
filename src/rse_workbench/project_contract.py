@@ -26,7 +26,7 @@ class ProjectContract:
         return self.project_dir / ".devcontainer" / "Singularity.def"
 
     @property
-    def singularity_sif(self) -> Path:
+    def SINGULARITY_IMAGE(self) -> Path:
         return self.project_dir / ".devcontainer" / "Singularity.sif"
 
     @property

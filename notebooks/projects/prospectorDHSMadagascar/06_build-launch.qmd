@@ -52,7 +52,7 @@ string and builds the SIF. It returns the job ID for tracking.
 
 ```{python}
 #| sorting-hat: remove
-job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_SIF)
+job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_IMAGE)
 job.job_id
 ```
 
@@ -108,7 +108,7 @@ echo DONE!
 job = executor.submit(
     install_in_container,
     project_dir=PROJECT_DIR,
-    singularity_sif=SINGULARITY_SIF,
+    SINGULARITY_IMAGE=SINGULARITY_IMAGE,
     runtime_command=INSTALL_RUNTIME_COMMAND
 )
 job.job_id
@@ -251,7 +251,7 @@ show_spython(
         spack install --deprecated --fail-fast -j8 --no-checksum
         echo done!!!
         """,
-        image=str(SINGULARITY_SIF),
+        image=str(SINGULARITY_IMAGE),
         bind_project=PROJECT_DIR,
     ),
 )
