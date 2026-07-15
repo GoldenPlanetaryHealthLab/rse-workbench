@@ -1,0 +1,19 @@
+project:
+  type: default
+  render:
+    - "*.qmd"
+
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-dir: "../../src/rse_workbench"
+    include-yaml: false
+  sorting-hat:
+        keep: python
+
+execute: 
+  eval: false
+
+format: gfm

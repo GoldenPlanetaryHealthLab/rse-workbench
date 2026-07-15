@@ -43,7 +43,6 @@ def default_rproject(
     r_version: str,
     packages: list[str],
     git_dependencies: list[dict[str, str]] | None = None,
-    library: str = ".rv/library",
 ) -> dict[str, Any]:
     """Return the default rv project configuration.
 
@@ -72,7 +71,6 @@ def default_rproject(
         dependencies.extend(git_dependencies)
 
     return {
-        "library": library,
         "project": {
             "name": project_name,
             "r_version": r_version,
