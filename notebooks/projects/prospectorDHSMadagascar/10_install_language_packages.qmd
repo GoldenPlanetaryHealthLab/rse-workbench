@@ -82,7 +82,7 @@ set -euo pipefail
 source /work/env/activate.sh
 cd /work
 
-rv sync
+#rv sync
 
 Rscript -e '
 cat("R.home(): ", R.home(), "\n\n")
@@ -92,6 +92,8 @@ cat("\nknitr:\n")
 print(find.package("knitr"))
 cat("\nrmarkdown:\n")
 print(find.package("rmarkdown"))
+cat("\nrdhs:\n")
+print(find.package("rdhs"))
 '
 
 quarto check knitr
