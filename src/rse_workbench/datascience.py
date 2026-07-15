@@ -1,60 +1,12 @@
+#' ---
+#' title: 8  05 Data Science Language Package Layer
+#' ---
+#' 
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-
-
-DEFAULT_R_PACKAGES = [
-    "box", # we use this for namespacing and dependency injection
-    "remotes",
-    "rprojroot", # always travel with this
-    "stringi",
-    "targets",
-    "tarchetypes",
-    "usethis",
-    "httpgd",
-    "httpuv",
-    "parsermd",
-    "rmarkdown",
-    "skimr",
-    "DiagrammeR",
-    "svglite",
-    "later",
-    "rstudioapi",
-    "dplyr",
-    "languageserver",
-    "here",
-    "fledge",
-    "readr",
-    "stringr",
-    "withr",
-    "readxl",
-    "tidyverse",
-    "websocket",
-    "codetools",
-    "quarto",
-    "rlang",
-    "purrr",
-    "tibble",
-    "devtools",
-    "jsonlite",
-]
-
-DEFAULT_R_GIT_DEPENDENCIES = [
-    {
-        "name": "sess",
-        "git": "https://github.com/REditorSupport/vscode-R",
-        "branch": "master",
-        "directory": "sess",
-    }
-]
-
-DEFAULT_PYTHON_PACKAGES = [
-    "numpy",
-    "pandas",
-    "ipykernel",
-    "jupyterlab",
-]
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -66,18 +18,44 @@ def _dedupe(items: list[str]) -> list[str]:
             seen.add(item)
     return result
 
+from typing import Any
+
+
 def default_rproject(
     project_name: str,
     r_version: str,
     packages: list[str],
     git_dependencies: list[dict[str, str]] | None = None,
+    library: str = ".rv/library",
 ) -> dict[str, Any]:
-    """Return the default rv project file data."""
+    """Return the default rv project configuration.
+
+    Parameters
+    ----------
+    project_name
+        Name of the project.
+
+    r_version
+        Required R version.
+
+    packages
+        CRAN-style package dependencies.
+
+    git_dependencies
+        Optional git dependencies.
+
+    library
+        Project-local rv library location. Relative paths are resolved
+        relative to the project directory by rv.
+    """
 
     dependencies: list[Any] = _dedupe(packages)
-    dependencies.extend(git_dependencies)
+
+    if git_dependencies:
+        dependencies.extend(git_dependencies)
 
     return {
+        "library": library,
         "project": {
             "name": project_name,
             "r_version": r_version,
@@ -85,10 +63,11 @@ def default_rproject(
                 {
                     "alias": "PPM",
                     "url": "https://packagemanager.posit.co/cran/latest",
+                    "force_source": True
                 }
             ],
             "dependencies": dependencies,
-        }
+        },
     }
 
 

@@ -1,8 +1,39 @@
-#' ---
-#' title: 4  01 Project Contract
-#' ---
-#' 
+---
+title: "01 Project Contract"
+format: gfm
+execute:
+  eval: false
+filters:
+  - sorting-hat
+  - ripper
+extensions:
+  ripper:
+    output-name: "project_contract"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+    keep: python
+---
+This notebook defines the project contract.
+It answers one question:
 
+> **What is this project, and how should the rest of the workbench refer to it?**
+
+A project contract is the single source of truth describing a project's
+identity, platform configuration, resource defaults, and filesystem
+layout.
+
+The contract is intentionally *declarative*. It does not build
+containers, install software, submit Slurm jobs, or activate
+environments. Instead, later notebooks consume the contract to discover
+where files belong and how the project should be configured.
+
+All derived paths—such as the Singularity image, Slurm directories,
+environment locations, and configuration files—are computed by the
+contract itself. Downstream notebooks should use the contract rather
+than reconstructing paths themselves.
+
+```{python}
+#| sorting-hat: keep
 from __future__ import annotations
 
 import os
@@ -229,3 +260,110 @@ class ProjectContract:
             f"mode='{self.image_mode}', "
             f"project_dir='{self.project_dir}')"
         )
+```
+
+The only information that must be supplied is the information a user
+actually chooses for a project.
+
+First, choose the image mode.
+
+- **Sandbox** mode points the workbench at a writable sandbox image for
+  rapid experimentation.
+
+- **Build** mode points the workbench at the final read-only SIF used
+  for production work.
+
+Every later notebook should simply use
+`project_contract.singularity_image`; none of them need to know how that
+path is chosen.
+
+```{python}
+#| sorting-hat: remove
+IMAGE_MODE = "build"
+```
+
+Next, define the project itself.
+
+These values describe the project's identity and the platform it will
+use. Everything else is derived automatically from this information.
+
+```{python}
+#| sorting-hat: remove
+from pathlib import Path
+from pyprojroot import here
+
+PROJECT_NAME = "prospectorDHSMadagascar"
+assert PROJECT_NAME, "Please choose a project name."
+
+PROJECT_ROOT = Path(
+    "/n/holylabs/LABS/cgolden_lab/Lab/frontier/works/prospectors"
+)
+
+WORKBENCH_DIR = here()
+BASE_IMAGE = "docker://spack/rockylinux9:develop"
+R_VERSION = "4.5.1"
+PYTHON_VERSION = "3.14"
+ENABLE_DIRENV = True
+```
+
+Finally, choose the default Slurm resources that later notebooks should
+use when building images or installing project environments.
+These are simply defaults—they do not launch any jobs.
+
+```{python}
+#| sorting-hat: remove
+SLURM_PARTITION = "hsph"
+SLURM_CPUS = 6
+SLURM_MEM = "32G"
+SLURM_HOURS = 2
+SLURM_EMAIL = (
+    "aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com"
+)
+```
+
+Construct the project contract.
+From this point onward, every notebook should obtain project
+configuration and filesystem locations from `project_contract`.
+
+```{python}
+#| sorting-hat: remove
+from rse_workbench.project_contract import ProjectContract
+
+project_contract = ProjectContract(
+
+    project_name=PROJECT_NAME,
+    project_root=PROJECT_ROOT,
+    workbench_dir=WORKBENCH_DIR,
+    image_mode=IMAGE_MODE,
+    base_image=BASE_IMAGE,
+    r_version=R_VERSION,
+    python_version=PYTHON_VERSION,
+    enable_direnv=ENABLE_DIRENV,
+    slurm_build_partition=SLURM_PARTITION,
+    slurm_build_cpus=SLURM_CPUS,
+    slurm_build_mem=SLURM_MEM,
+    slurm_build_hours=SLURM_HOURS,
+    slurm_email=SLURM_EMAIL,
+)
+```
+
+Next, create the standard project directory layout.
+Because the contract knows which directories belong to every project,
+later notebooks can safely assume these locations already exist.
+
+```{python}
+#| sorting-hat: remove
+project_contract.create_directories()
+```
+
+Finally, inspect the contract as a quick sanity check before continuing.
+
+```{python}
+#| sorting-hat: remove
+project_contract.summary()
+```
+
+Stop here.
+
+The next notebook uses this contract to define the project's base
+platform image.

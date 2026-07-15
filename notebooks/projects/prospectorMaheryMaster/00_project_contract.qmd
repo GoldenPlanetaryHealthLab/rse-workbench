@@ -44,7 +44,7 @@ from pathlib import Path
 
 from pyprojroot import here
 
-PROJECT_NAME = "prospectorDHSMadagascar"  # FILL ME IN
+PROJECT_NAME = "prospectorMaheryMaster"  # FILL ME IN
 assert PROJECT_NAME, "Please fill in the project name."
 
 WORKBENCH_DIR = here()

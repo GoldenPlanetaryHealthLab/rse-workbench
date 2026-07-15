@@ -239,6 +239,42 @@ from rse_workbench.datascience import (
 )
 ```
 
+We have some scripts that already exist in the project, 
+so we'll use these to write the prospective `rproject.toml` and `pyproject.toml` files. Using `rg`, we found:
+
+```
+library(car)
+library(cowplot)
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(ggplot2)
+library(Hmisc)
+library(ineq)
+library(lme4)
+library(lubridate)
+library(mice)
+library(nlme)
+library(pastecs)
+library(pastecs)
+library(plyr)
+library(plyr)
+library(psych)
+library(psych)
+library(readr)
+library(readxl)
+library(readxl)
+library(reshape)
+library(reshape2)
+library(reshape2)
+library(sm)
+library(stringr)
+library(tidyr)
+library(tidyverse)
+library(xlsx)
+library(zoo)
+```
+
 ```{python}
 #| sorting-hat: keep
 DEFAULT_R_PACKAGES = [
@@ -263,7 +299,7 @@ DEFAULT_R_PACKAGES = [
     "here",
     "fledge",
     "readr",
-    # "stringr",
+    "stringr",
     "withr",
     "readxl",
     "tidyverse",
@@ -291,10 +327,6 @@ DEFAULT_R_GIT_DEPENDENCIES = [
         "git": "https://github.com/REditorSupport/vscode-R",
         "branch": "master",
         "directory": "sess",
-    },
-    {
-        "name": "stringr",
-        "force_source": True
     }
 ]
 
