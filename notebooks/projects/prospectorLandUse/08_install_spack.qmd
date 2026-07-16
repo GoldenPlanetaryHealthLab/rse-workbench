@@ -1,0 +1,130 @@
+---
+title: "08 Install Spack Layer"
+format: gfm
+execute:
+  eval: false
+filters:
+  - sorting-hat
+  - ripper
+extensions:
+  ripper:
+    output-name: "install_spack"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+    keep: python
+---
+
+This notebook installs the project Spack layer. Spack works by creating
+a project specific DAG of dependencies and finding the best way to build them.
+Installation will usually work, but you can use this notebook to debug installation issues.
+
+Do not run `rv sync`, `uv sync`, Quarto checks, or VS Code, yet.
+
+```{python}
+#| sorting-hat: keep
+from pathlib import Path
+from typing import Any
+from spython.main import Client
+from pathlib import Path
+import os
+
+def install_in_container(
+    project_dir: Path,
+    SINGULARITY_IMAGE: Path,
+    runtime_command: str = INSTALL_RUNTIME_COMMAND,
+) -> dict[str, Any]:
+    """Install the project Spack and data science environments inside the final SIF."""
+
+
+    project_dir = Path(project_dir)
+    SINGULARITY_IMAGE = Path(SINGULARITY_IMAGE)
+
+    container_home = project_dir / ".container-home"
+    container_tmp = project_dir / ".container-tmp"
+
+    container_home.mkdir(parents=True, exist_ok=True)
+    container_tmp.mkdir(parents=True, exist_ok=True)
+
+    os.environ.update({
+        "SINGULARITYENV_R_LIBS": "",
+        "SINGULARITYENV_R_LIBS_USER": "",
+        "SINGULARITYENV_R_LIBS_SITE": "",
+        "SINGULARITYENV_SPACK_DISABLE_LOCAL_CONFIG": "true",
+    })
+
+    options = [
+        "--cleanenv",
+        "--home", f"{container_home}:/home/rse",
+        "--bind", f"{project_dir}:/work",
+        "--bind", f"{container_tmp}:/tmp",
+    ]
+
+    return Client.execute(
+        image=str(SINGULARITY_IMAGE),
+        command=["bash", "--noprofile", "--norc", "-lc", runtime_command],
+        options=options,
+        sudo=False,
+        return_result=True,
+    )
+
+```
+
+
+```{python}
+#| sorting-hat: remove
+import submitit
+from rse_workbench.helpers import show_submitit_job
+from rse_workbench.install_spack import install_in_container
+```
+
+```{python}
+#| sorting-hat: remove
+executor = submitit.AutoExecutor(folder=str(project_contract.submitit_dir / "%j"))
+executor.update_parameters(
+    timeout_min=project_contract.slurm_build_hours * 60,
+    slurm_partition=project_contract.slurm_build_partition,
+    mem_gb=float(project_contract.slurm_build_mem.rstrip("G")),
+    cpus_per_task=project_contract.slurm_build_cpus,
+    slurm_job_name=f"install-spack-{project_contract.project_name}",
+    mail_user=project_contract.slurm_email,
+)
+```
+
+```{python}
+#| sorting-hat: remove
+SPACK_INSTALL_COMMAND = r'''
+set -euo pipefail
+
+df -h /tmp /work
+source /work/env/activate.sh
+
+which spack
+which python3
+spack debug report
+spack concretize --force
+spack install --deprecated --fail-fast -j6 --no-checksum
+spack find
+
+echo SPACK_INSTALL_DONE
+'''
+```
+
+```{python}
+#| sorting-hat: remove
+job = executor.submit(
+    install_in_container,
+    project_dir=project_contract.project_dir,
+    SINGULARITY_IMAGE=project_contract.singularity_image,
+    runtime_command=SPACK_INSTALL_COMMAND,
+)
+job.job_id
+```
+
+```{python}
+#| sorting-hat: remove
+result = show_submitit_job(job)
+if result is not None:
+    print(''.join(result['message']))
+```
+
+Stop here until the Spack layer succeeds.
