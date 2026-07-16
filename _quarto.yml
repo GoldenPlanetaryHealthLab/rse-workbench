@@ -13,12 +13,15 @@ book:
     - part: "Template"
       chapters:
         - notebooks/rse_workbench/00_misc.qmd
-        - notebooks/rse_workbench/01_project-contract.qmd
-        - notebooks/rse_workbench/02_platform-recipe.qmd
-        - notebooks/rse_workbench/03_sci-sysdeps.qmd
-        - notebooks/rse_workbench/04_datascience.qmd
-        - notebooks/rse_workbench/05_project-activation.qmd
-        - notebooks/rse_workbench/06_build-launch.qmd
+        - notebooks/rse_workbench/01_project_contract.qmd
+        - notebooks/rse_workbench/02_platform_image.qmd
+        - notebooks/rse_workbench/03_build_platform.qmd
+        - notebooks/rse_workbench/04_spack_yaml.qmd
+        - notebooks/rse_workbench/05_language_packages.qmd
+        #- notebooks/rse_workbench/03_sci-sysdeps.qmd
+        #- notebooks/rse_workbench/04_datascience.qmd
+        #- notebooks/rse_workbench/05_project-activation.qmd
+        #- notebooks/rse_workbench/06_build-launch.qmd
 
 format:
   html:

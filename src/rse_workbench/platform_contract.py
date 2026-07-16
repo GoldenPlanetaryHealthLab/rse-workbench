@@ -1,8 +1,3 @@
-#' ---
-#' title: 5  Platform Recipe
-#' ---
-#' 
-
 # from rse_workbench.platform_contract import Installable
 # from rse_workbench.platform_contract import compose_platform_recipe
 
@@ -36,8 +31,13 @@ from spython.main.parse.writers import SingularityWriter
 def compose_platform_recipe(
     base_image: str,
     installables: list[Installable] | None = None,
-    env_vars: dict[str, str] | None = None
-) -> Recipe:
+    env_vars: dict[str, str] | None = None,
+    dnf_update: list[str] = [
+        "dnf install -y ca-certificates tar gzip which findutils file shadow-utils",
+        "dnf install -y epel-release",
+        "mkdir -p /work /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache",
+    ],
+) -> tuple[Recipe, str]:
     """Build a Singularity definition for the reusable platform image."""
 
     recipe = Recipe()
@@ -50,11 +50,7 @@ def compose_platform_recipe(
         "Definition created on: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     ]
     
-    recipe.install = [
-        "dnf install -y curl ca-certificates tar gzip which findutils file shadow-utils",
-        "dnf install -y epel-release",
-        "mkdir -p /work /tmp/spack-user-config /tmp/spack-user-cache /tmp/spack-misc-cache",
-    ]
+    recipe.install = dnf_update
 
     for item in installables:
         recipe.install.extend(item.install_lines())

@@ -1,0 +1,113 @@
+---
+title: "Scientific System Dependency Layer with Spack"
+format: gfm
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "sci_sysdeps"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+execute: 
+  eval: false
+---
+
+```{python}
+from rse_workbench.sci_sysdeps import default_spack_env, write_spack_yaml
+```
+
+Spack is a package manager for scientific software on HPC systems. It 
+is designed to support multiple versions and configurations of software 
+on a wide variety of platforms and environments. Spack is used to manage the system 
+dependency layer of the project.
+
+Spack works by defining packages as Python classes in a declarative way,
+and the workflow is to define a `spack.yaml` file that lists the 
+packages and their versions in one place. Spack then resolves the
+dependencies as a DAG and builds the packages in the correct order.
+So long as the package recipe is correct in the Spack package catalog,
+Spack will build the environment correctly.
+
+It's important to delineate responsibilities — Spack owns only the 
+system dependency layer for the Python and R packages. Avoid 
+CRAN-level Spack recipes such as `r-fs`, `r-httpuv`, `r-dplyr`, 
+or `r-rmarkdown` unless there is a strong reason. Those packages 
+belong to `rv`.
+
+Installing a library is not the same as making it discoverable. For example,
+`httpuv` may find `libuv` through `pkg-config` while still failing to find
+`zlib.h`; this is why the activation bridge exists. Also, `spack.yaml` cannot
+patch missing `depends_on()` metadata in a Spack package recipe.
+
+There are some default system dependencies that are going to be required 
+for most of our projects to build and run. We can define these as defaults
+for our environment.
+
+```{python}
+#| sorting-hat: remove
+DEFAULT_SYSTEM_SPECS = [
+    "libiconv",
+    "ncurses",
+    "openblas",
+    "curl",
+    "openssl",
+    "pkgconf",
+    "abseil-cpp",
+    "zlib",
+    "zlib-ng+compat",
+    "cmake",
+    "gmake",
+    "git",
+    "libx11",
+    "libxml2",
+    "freetype",
+    "libjpeg",
+    "libjpeg-turbo",
+    "libpng",
+    "libtiff",
+    "libwebp +libwebpmux",
+    "icu4c",
+    "fontconfig",
+    "fribidi",
+    "harfbuzz",
+    "libgit2",
+    "cairo",
+    "readline",
+    "libuv",
+    "libgit2"
+]
+
+DEFAULT_SYSTEM_SPECS.extend([
+    "proj",
+    "geos",
+    "gdal",
+    "udunits",
+    "libuv",
+    "zlib",
+    "r-udunits2",
+    "rdhs"
+])
+
+spack_env = default_spack_env(
+    r_version=R_VERSION,
+    python_version=PYTHON_VERSION,
+    default_specs=DEFAULT_SYSTEM_SPECS
+)
+spack_env
+```
+
+When you're ready to write it out to file, you can use the `write_spack_yaml()` 
+function. This will create the parent directories if they don't exist.
+
+```{python}
+#| sorting-hat: remove
+write_spack_yaml(SPACK_YAML_PATH, spack_env)
+```
+
+By the end of this chapter, you should be able to answer the question,
+"what broad area of science does this project entail and what
+toolkit will that require?"
+
+In the next chapter, you'll define the project-specific dependencies.

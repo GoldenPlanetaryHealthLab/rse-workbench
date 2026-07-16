@@ -1,0 +1,131 @@
+---
+title: "03 Scientific System Dependency Layer"
+format: gfm
+execute:
+  eval: false
+filters:
+  - sorting-hat
+  - ripper
+extensions:
+  ripper:
+    output-name: "sci_sysdeps"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+    keep: python
+---
+
+This notebook writes `spack.yaml`. It should only answer:
+
+> What scientific system dependencies does this project require?
+
+Do not install the environment here.
+
+```{python}
+from rse_workbench.sci_sysdeps import default_spack_env, write_spack_yaml
+```
+
+```{python}
+#| sorting-hat: remove
+DEFAULT_SYSTEM_SPECS = [
+    "r@4.5.1 +X",
+    "python@3.14",
+    "libiconv",
+    "ncurses",
+    "openblas",
+    "curl",
+    "openssl",
+    "pkgconf",
+    "abseil-cpp",
+    "zlib",
+    "zlib-ng+compat",
+    "cmake",
+    "gmake",
+    "git",
+    "libx11",
+    "libxml2",
+    "freetype",
+    "libjpeg",
+    "libjpeg-turbo",
+    "libpng",
+    "libtiff",
+    "libwebp +libwebpmux",
+    "icu4c",
+    "fontconfig",
+    "fribidi",
+    "harfbuzz",
+    "libgit2",
+    "cairo +X",
+    "readline",
+    "libuv",
+    "proj",
+    "geos",
+    "gdal",
+    "udunits",
+    "r-udunits2",
+]
+```
+
+```
+dnf install -y epel-release
+dnf install -y dnf-plugins-core
+dnf config-manager --set-enabled crb
+dnf install -y epel-release
+dnf install -y epel-release
+dnf install -y dnf-plugins-core
+dnf config-manager --set-enabled crb
+dnf install -y dnf-plugins-core
+dnf config-manager --set-enabled crb
+dnf install -y epel-release
+dnf install -y dnf-plugins-core
+dnf config-manager --set-enabled crb
+dnf install -y epel-release
+dnf install -y git libicu-devel glpk-devel libxml2-devel cmake make libuv-devel libX11-devel libcurl-devel openssl-devel libgit2-devel fontconfig-devel freetype-devel cairo-devel libpng-devel libtiff-devel zlib-devel \
+  fribidi-devel harfbuzz-devel libjpeg-turbo-devel libwebp-devel abseil-cpp-devel gdal-devel gdal geos-devel proj-devel sqlite-devel udunits2-devel
+```
+
+We can extend the default specs with Python:
+
+```{python}
+DEFAULT_SYSTEM_SPECS.extend([
+    "glpk"
+])
+```
+
+It can be useful to predict the system dependencies using
+R's `pak::pkg_sysreqs()` function.
+
+
+```{python}
+#| sorting-hat: remove
+spack_env = {
+    "spack": {
+        "specs": DEFAULT_SYSTEM_SPECS,
+        "view": "/work/.spack-env/view",
+        "packages": {
+            "all": {
+                "compiler": ["gcc@11.5.0"]
+            }
+        },
+        "config": {
+            "install_tree": {"root": "/work/.spack-env/install"},
+            "source_cache": "/work/.spack/cache/source",
+            "misc_cache": "/work/.spack/cache/misc",
+            "build_stage": ["/work/.spack/stage"],
+            "shared_linking": {
+                "type": "rpath",
+                "missing_library_policy": "error",
+            },
+        },
+    }
+}
+
+write_spack_yaml(SPACK_YAML_PATH, spack_env)
+SPACK_YAML_PATH
+```
+
+```{python}
+#| sorting-hat: remove
+print(SPACK_YAML_PATH.read_text())
+```
+
+Stop here. The next notebook writes language package declarations.

@@ -1,0 +1,82 @@
+---
+title: "10 Validate Quarto"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook validates Quarto after Spack, R, and language packages are installed.
+
+Start with Quarto itself and a minimal render. Only then render project notebooks or extension-backed documents.
+
+```{python}
+from rse_workbench.helpers import spython_exec, show_spython
+```
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+source /work/env/activate.sh
+
+which quarto
+quarto --version
+quarto check all
+''',
+        image=SINGULARITY_IMAGE,
+        options=[
+            "--home", f"{CONTAINER_HOME}:/home/rse",
+            "--bind", f"{CONTAINER_TMP}:/tmp",
+        ],
+        bind_project=PROJECT_DIR,
+    ),
+)
+```
+
+## Minimal render without extensions
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+source /work/env/activate.sh
+cd /work
+
+cat > /tmp/quarto-minimal.qmd <<'QMD'
+---
+title: "Minimal Quarto Test"
+format: html
+---
+
+```{r}
+1 + 1
+```
+QMD
+
+quarto render /tmp/quarto-minimal.qmd --output-dir /tmp/quarto-minimal-output
+ls -lah /tmp/quarto-minimal-output
+''',
+        image=SINGULARITY_IMAGE,
+        options=[
+            "--home", f"{CONTAINER_HOME}:/home/rse",
+            "--bind", f"{CONTAINER_TMP}:/tmp",
+        ],
+        bind_project=PROJECT_DIR,
+    ),
+    tail=200,
+)
+```
+
+## Extension policy
+
+If project notebooks require executable filters like `sorting-hat` or `ripper`, place them under:
+
+```text
+/work/env/bin
+```
+
+The activation script already prepends `/work/env/bin` to `PATH`.
+
+Do not rely on arbitrary `/work/dev/<filter>` paths unless those files are created by a notebook and made executable.

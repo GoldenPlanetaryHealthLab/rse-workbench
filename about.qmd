@@ -27,3 +27,13 @@ project workbenches.
 A future version of this notebook strategy may export selected chunks into a `pytask` DAG. This might help us manage state.
 For now, the notebook remains the narrated construction record, and the exported 
 project files are the reproducible boundary.
+
+Why RSE Workbench Works:
+
+1. Unify the interface to an environment-building process that is otherwise scattered across multiple tools and languages.
+
+2. Stepwise construction of environment aligns with the human learning process. Each notebook is a narrative of the reasoning, experiments, failures, fixes, and final decisions used to define the project runtime environment.
+
+3. Declarative git-tracked project files
+
+4. Easy to duplicate and modify for new projects

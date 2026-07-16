@@ -130,10 +130,6 @@ To see the ongoing result of a job with `submitit`, we can use the following hel
 
 ```{python}
 #| sorting-hat: keep
-"""Slurm display and launch-script helpers."""
-
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

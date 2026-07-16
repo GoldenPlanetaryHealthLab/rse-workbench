@@ -104,10 +104,6 @@ def show_spython(result: Any, *, tail: int | None = None) -> dict[str, Any]:
     return normalized
 
 
-"""Slurm display and launch-script helpers."""
-
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

@@ -1,0 +1,82 @@
+---
+title: "03 Build Platform"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook builds the platform image and tests the platform contract.
+
+Do not mount `/work`. Do not activate a project Spack environment yet. Do not run `rv sync`, `quarto check`, or VS Code tunnel commands yet. These actions will obfuscate your ability
+to validate the platform.
+
+```{python}
+from pathlib import Path
+import os
+from spython.main import Client
+from rse_workbench.helpers import spython_exec, show_spython
+```
+
+The following code may take some time as it runs in the foreground:
+
+```{python}
+Client.build(
+    image=str(project_contract.singularity_def),
+    recipe=str(project_contract.base_image),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+## Platform-only validation
+
+If the installables in the previous notebook are correct,
+the platform image should pass the following tests.
+Feel free to add more if you need!
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+
+echo "PATH=$PATH"
+which spack
+which python3
+which rv
+which uv
+which code
+which quarto
+
+spack --version
+python3 --version
+rv --version
+uv --version
+code --version
+quarto --version
+''',
+        image=project_contract.base_image,
+        options=["--no-home"],
+    ),
+    tail=120,
+)
+```
+
+Expected result:
+
+```text
+spack works
+python3 works
+rv works
+uv works
+code works
+quarto works
+```
+
+Note that the above tests are just for the platform; they are
+not expected to be carried over to the final image — that will
+be tested independently.
+
+#TODO insert computational tests here e.g. pytest, assert statements, etc.
+
+Stop here and debug if the platform contract fails.

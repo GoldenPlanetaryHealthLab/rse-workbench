@@ -1,0 +1,53 @@
+---
+title: "07 Validate Activation"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook tests only project activation.
+
+Do not install Spack packages. Do not run `rv sync`. Do not run Quarto checks.
+
+```{python}
+#| sorting-hat: remove
+from rse_workbench.helpers import spython_exec, show_spython
+```
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+source /work/env/activate.sh
+
+echo "PATH=$PATH"
+echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-}"
+echo "CPATH=${CPATH:-}"
+echo "LIBRARY_PATH=${LIBRARY_PATH:-}"
+echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+echo "R_HOME=${R_HOME:-}"
+
+which spack
+which python3
+spack debug report
+spack env status
+''',
+        image=project_contract.base_image,
+        options=["--no-home"],
+        bind_project=project_contract.project_dir,
+    )
+)
+```
+
+
+Expected result:
+
+```text
+spack is visible
+python3 is visible
+project Spack environment activates
+R_HOME is empty
+```
+
+Stop here if activation fails.

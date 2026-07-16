@@ -1,0 +1,220 @@
+---
+title: "Platform Recipe"
+format: gfm
+filters:
+    - sorting-hat
+    - ripper
+extensions:
+  ripper:
+    output-name: "platform_contract"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+        keep: python
+execute: 
+  eval: false
+---
+
+```{python}
+from rse_workbench.platform_contract import Installable
+from rse_workbench.platform_contract import compose_platform_recipe, recipe_to_definition
+```
+
+THe platform recipe section tells us what foundation to build
+our project on. It picks the base Singularity image, initiates
+Spack, and defines the basic structure of the linux machine
+that the project will be built on.
+
+The platform image should provide the bare minimum tools
+to start the development environment — not a full 
+project-specific dependency closure. It starts from the 
+Rocky/Spack base image, installs minimal OS tools, 
+creates `/work`, and installs `rv`, `uv`, `arf`, and the VSCode CLI.
+
+We build the platform image contract using a new
+`installable` `dataclass` and the `spython` 
+library, which is a Python interface to Singularity. It 
+allows us to programmatically define the image layers and 
+contents.
+
+This data structure allows us to quickly define
+the main tools we will need installed in
+the Linux environment, including test lines
+and the path to the tool if it is not in the default `$PATH`.
+
+Below, we define our 4 tools:
+
+```{python}
+#| sorting-hat: remove
+arf = Installable(
+    name="arf",
+    kind="cargo",
+    path="/usr/local/bin/arf",
+    commands=[
+        "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/eitsupi/arf/releases/latest/download/arf-console-installer.sh | sh",
+        """
+ARF_BIN="$(find /root/.cargo/bin /home -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+if [ -z "$ARF_BIN" ]; then
+ARF_BIN="$(find / -path '*/.cargo/bin/arf' -type f 2>/dev/null | head -n 1)"
+fi
+test -n "$ARF_BIN"
+install -m 0755 "$ARF_BIN" /usr/local/bin/arf
+""",
+    ],
+    test=["command -v arf", "arf --version"],
+)
+
+uv = Installable(
+    name="uv",
+    kind="binary",
+    path="/usr/local/bin/uv",
+    commands=[
+        """
+curl -LsSf https://astral.sh/uv/install.sh | sh
+UV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/uv' -type f 2>/dev/null | head -n 1)"
+if [ -z "$UV_BIN" ]; then
+UV_BIN="$(find / -path '*/.local/bin/uv' -type f 2>/dev/null | head -n 1)"
+fi
+test -n "$UV_BIN"
+install -m 0755 "$UV_BIN" /usr/local/bin/uv
+""",
+    ],
+    test=["command -v uv", "uv --version"],
+)
+
+rv = Installable(
+    name="rv",
+    kind="binary",
+    path="/usr/local/bin/rv",
+    commands=[
+        """
+curl -sSL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
+RV_BIN="$(find /root/.local/bin /home -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+if [ -z "$RV_BIN" ]; then
+RV_BIN="$(find / -path '*/.local/bin/rv' -type f 2>/dev/null | head -n 1)"
+fi
+test -n "$RV_BIN"
+install -m 0755 "$RV_BIN" /usr/local/bin/rv
+""",
+    ],
+    test=["command -v rv", "rv --version"],
+)
+
+code = Installable(
+    name="code",
+    kind="binary",
+    path="/usr/local/bin/code",
+    commands=[
+        """
+tmpdir="$(mktemp -d)"
+cd "$tmpdir"
+curl -L --fail --show-error --output vscode_cli.tar.gz "https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64"
+tar -xzf vscode_cli.tar.gz
+CODE_BIN="$(find "$tmpdir" -type f -name code | head -n 1)"
+test -n "$CODE_BIN"
+test -x "$CODE_BIN" || chmod +x "$CODE_BIN"
+install -m 0755 "$CODE_BIN" /usr/local/bin/code
+/usr/local/bin/code --version
+""",
+    ],
+    test=["command -v code", "code --version"],
+)
+```
+
+I'm adding Quarto into this one as we're now building
+everything using Quarto notebooks:
+
+```{python}
+quarto = Installable(
+    name="quarto",
+    kind="binary",
+    path="/usr/local/bin/quarto",
+    commands=[
+        """
+if [ "$(uname -m)" = "aarch64" ]; then
+  QUARTO_ARCH="arm64"
+else
+  QUARTO_ARCH="amd64"
+fi
+
+mkdir -p /opt/quarto/${QUARTO_VERSION}
+
+curl -o quarto.tar.gz -L \
+    "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-${QUARTO_ARCH}.tar.gz"
+
+tar -zxvf quarto.tar.gz \
+    -C "/opt/quarto/${QUARTO_VERSION}" \
+    --strip-components=1
+
+rm quarto.tar.gz
+QUARTO_BIN="$(find "/opt/quarto/${QUARTO_VERSION}" -type f -name quarto | head -n 1)"
+test -n "$QUARTO_BIN"
+test -x "$QUARTO_BIN" || chmod +x "$QUARTO_BIN"
+install -m 0755 "$QUARTO_BIN" /usr/local/bin/quarto
+/usr/local/bin/quarto --version
+""",
+    ],
+    test=["command -v quarto", "quarto --version"],
+)
+```
+
+Here's how we define the platform recipe, using a `spython`
+Singularity recipe:
+
+Project-specific Spack view activation variables do not belong in the image
+`%environment`. The project provides those through `/work/env/activate-system-deps.sh`.
+
+```{python}
+#| sorting-hat: remove
+recipe = compose_platform_recipe(
+    base_image=BASE_IMAGE, 
+    installables=[arf, code, rv, uv, quarto]
+    )
+
+definition = recipe_to_definition(recipe)
+print(definition)
+```
+
+At this point, we can build the first iteration of the image using the `spython` 
+library. This will create a Singularity image file in the project directory. To
+do this, we need the `Singularity.def` file written out to the project directory, 
+and then we can use `spython` to build the image.
+
+```{python}
+#| sorting-hat: remove
+from spython.main import Client
+
+TMP_SANDBOX = Path(f"/tmp/{os.environ['USER']}-{PROJECT_NAME}-sandbox")
+
+SINGULARITY_DEF.write_text(definition)
+
+Client.build(
+    image=str(TMP_SANDBOX),
+    recipe=str(SINGULARITY_DEF),
+    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    sudo=False,
+)
+```
+
+To try out installing a new tool into the platform image, we can experiment
+with the image using our `spython_exec` function. Once we are sure of the
+commands we want, we can define a new `Installable` and then call
+`compose_platform_recipe` again with the new tool added 
+to the list of installables.
+
+
+```{python}
+#| sorting-hat: remove
+show_spython(
+    spython_exec(
+        command="arf --version",
+        image=TMP_SANDBOX,
+        options=["--fakeroot", "--writable", "--no-home"],
+        bind_project=PROJECT_DIR,
+    )
+)
+```
+
+By the end of this chapter, you should be able to answer the question,
+"what kind of computer does this project run on?"
+
+In the next chapter, you'll define the scientific dependencies.

@@ -1,0 +1,163 @@
+---
+title: "05 Data Science Language Package Layer"
+format: gfm
+execute:
+  eval: false
+filters:
+  - sorting-hat
+  - ripper
+extensions:
+  ripper:
+    output-name: "datascience"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+    keep: python
+---
+
+This notebook writes `rproject.toml` and `pyproject.toml`.
+
+Do not run `rv sync` or `uv sync` here.
+
+Here's the default set of R and Python packages I'll typically have; make it
+leaner for faster builds, and add more as needed for your project. Bounce
+between this notebook and the Spack environment notebook to add any
+system dependencies you need for your R and Python packages.
+
+```{python}
+#| sorting-hat: remove
+DEFAULT_R_PACKAGES = [
+    "box", # we use this for namespacing and dependency injection
+    "remotes",
+    "rprojroot", # always travel with this
+    "stringi",
+    "targets",
+    "tarchetypes",
+    "usethis",
+    "httpgd",
+    "httpuv",
+    "parsermd",
+    "rmarkdown",
+    "skimr",
+    "DiagrammeR",
+    "svglite",
+    "later",
+    "rstudioapi",
+    "dplyr",
+    "languageserver",
+    "here",
+    "fledge",
+    "readr",
+    "stringr",
+    "withr",
+    "readxl",
+    "tidyverse",
+    "websocket",
+    "codetools",
+    "quarto",
+    "rlang",
+    "purrr",
+    "tibble",
+    "devtools",
+    "jsonlite",
+]
+
+DEFAULT_R_GIT_DEPENDENCIES = [
+    {
+        "name": "sess",
+        "git": "https://github.com/REditorSupport/vscode-R",
+        "branch": "master",
+        "directory": "sess",
+    }
+]
+
+DEFAULT_PYTHON_PACKAGES = [
+    "numpy",
+    "pandas",
+    "ipykernel",
+    "jupyterlab",
+]
+```
+
+```{python}
+DEFAULT_R_PACKAGES.extend([
+    "sf",
+    "nanoparquet",
+    "janitor",
+    "lubridate",
+    "frictionless",
+    "pkgsite",
+    "rdhs",
+        "box", # we use this for namespacing and dependency injection
+    "remotes",
+    "rprojroot", # always travel with this
+    "stringi",
+    "targets",
+    "tarchetypes",
+    "usethis",
+    "httpgd",
+    "httpuv",
+    "parsermd",
+    "rmarkdown",
+    "skimr",
+    "DiagrammeR",
+    "svglite",
+    "later",
+    "rstudioapi",
+    "dplyr",
+    "languageserver",
+    "here",
+    "fledge",
+    "readr",
+    "stringr",
+    "withr",
+    "readxl",
+    "tidyverse",
+    "websocket",
+    "codetools",
+    "quarto",
+    "rlang",
+    "purrr",
+    "tibble",
+    "devtools",
+    "jsonlite"
+])
+```
+
+```{python}
+#| sorting-hat: remove
+from rse_workbench.datascience import (
+    default_pyproject,
+    default_rproject,
+    write_pyproject_toml,
+    write_rproject_toml,
+)
+```
+
+
+
+```{python}
+#| sorting-hat: remove
+rproject = default_rproject(
+    project_name=project_contract.project_name,
+    r_version=project_contract.r_version,
+    packages=list(set(DEFAULT_R_PACKAGES)),
+    git_dependencies=DEFAULT_R_GIT_DEPENDENCIES,
+)
+
+pyproject = default_pyproject(
+    project_name=project_contract.project_name,
+    python_version=project_contract.python_version,
+    packages=list(set(DEFAULT_PYTHON_PACKAGES)),
+)
+
+write_rproject_toml(project_contract.rproject_toml, rproject)
+write_pyproject_toml(project_contract.pyproject_toml, pyproject)
+```
+
+```{python}
+#| sorting-hat: remove
+print(project_contract.rproject_toml.read_text())
+print(project_contract.pyproject_toml.read_text())
+```
+
+Stop here. The next notebook writes the runtime activation contract.

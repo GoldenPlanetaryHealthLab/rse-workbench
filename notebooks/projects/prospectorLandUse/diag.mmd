@@ -1,0 +1,62 @@
+flowchart LR
+  subgraph WB["Workbench repo"]
+    N0["00 Project Contract"]
+    N1["01 Platform Recipe"]
+    N2["02 Scientific Sysdeps"]
+    N3["03 Data Science Packages"]
+    N4["04 Activation Bridge"]
+    N5["05 Build / Install / Launch"]
+  end
+
+  subgraph WORK["Project work directory: /work"]
+    DEF[".devcontainer/Singularity.def"]
+    SIF[".devcontainer/Singularity.sif"]
+    SPACK["spack.yaml"]
+    RV["rproject.toml"]
+    UV["pyproject.toml"]
+    ACT["env/activate.sh"]
+    RVLIB[".rv/library"]
+    RVCACHE[".rv/cache"]
+    QCACHE[".quarto/cache"]
+    HOME[".container-home"]
+    TMP[".container-tmp"]
+    SLURM["slurm/launch_container.sbatch"]
+  end
+
+  subgraph SLURM_SYS["Slurm"]
+    JOB["Compute-node job"]
+  end
+
+  subgraph CONTAINER["Running Singularity container"]
+    MOUNT["/work bind mount"]
+    SPACKR["Spack R / Python / system libs"]
+    RVPKG["rv-managed R packages"]
+    QUARTO["Quarto render"]
+    VSCODE["VS Code tunnel"]
+  end
+
+  N0 --> WORK
+  N1 --> DEF
+  N2 --> SPACK
+  N3 --> RV
+  N3 --> UV
+  N4 --> ACT
+  N5 --> SIF
+  N5 --> SLURM
+
+  SLURM --> JOB
+  JOB --> CONTAINER
+
+  WORK -. bind .-> MOUNT
+  HOME -. writable home .-> CONTAINER
+  TMP -. /tmp .-> CONTAINER
+  RVCACHE -. package cache .-> RVPKG
+  QCACHE -. quarto cache .-> QUARTO
+
+  ACT --> SPACKR
+  SPACK --> SPACKR
+  RV --> RVPKG
+  SPACKR --> RVPKG
+  RVPKG --> QUARTO
+  QUARTO --> WORK
+  VSCODE --> WORK

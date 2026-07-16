@@ -52,7 +52,7 @@ string and builds the SIF. It returns the job ID for tracking.
 
 ```{python}
 #| sorting-hat: remove
-job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_SIF)
+job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_IMAGE)
 job.job_id
 ```
 
@@ -93,7 +93,7 @@ rv sync
 job = executor.submit(
     install_in_container,
     project_dir=PROJECT_DIR,
-    singularity_sif=SINGULARITY_SIF,
+    SINGULARITY_IMAGE=SINGULARITY_IMAGE,
     runtime_command=INSTALL_RUNTIME_COMMAND,
 )
 job.job_id
@@ -111,4 +111,111 @@ if result is not None:
 print(result['message'][0])
 ```
 
-And just for fun, maybe we can plot a dependency graph:
+When it's time to work on the project, you'll launch
+a container with a specific runtime command to
+run a VSCode tunnel in a container, with your
+project bound to `/work`. The runtime command will 
+also activate the project Spack environment and 
+install/update project dependencies as needed.
+
+```{python}
+runtime_command = [
+    "export SPACK_DISABLE_LOCAL_CONFIG=true",
+    ". /opt/spack/share/spack/setup-env.sh",
+    "cd /work",
+    "spack env activate -d .",
+    "spack concretize",
+    "spack install --deprecated --fail-fast -j12 --no-checksum",
+    "rv sync || true",
+    f"code tunnel --accept-server-license-terms --name {PROJECT_NAME}-vscode",
+]
+runtime_command
+```
+
+We can write the runtime command to our project-local 
+`launch.sh` script. We'll use `simple_slurm`
+for this. First, set the job params:
+
+```{python}
+from simple_slurm import Slurm
+
+mem = {
+    "small": "4G",
+    "medium": "8G",
+    "big": "32G",
+}
+
+n_hours = 4
+n_cpus = 12
+
+slurm = Slurm(
+    job_name=f"launch-{PROJECT_NAME}-container", 
+    cpus_per_task=n_cpus, 
+    mem=mem["big"], 
+    time=f"0{n_hours}:00:00", 
+    partition="hsph",
+    mail_user="aaaapr3lk7gfdswioulcmvi3te@harvard.org.slack.com",
+    output=str(PROJECT_DIR / "slurm" / "launch" / "logs" / "launch-%j.out"),    
+    error=str(PROJECT_DIR / "slurm" / "launch" / "logs" / "launch-%j.err")
+)
+
+print(slurm)
+
+slurm.add_cmd("set -o errexit -o nounset -o pipefail")
+```
+
+Next, set the project level variabless
+
+```{python}
+slurm.add_cmd(f"PROJECT_DIR=${{PROJECT_DIR}}")
+slurm.add_cmd(f"SIF=${{PROJECT_DIR}}/.devcontainer/Singularity.sif")
+slurm.add_cmd(f"CONTAINER_HOME=${{PROJECT_DIR}}/.container-home")
+slurm.add_cmd(f"mkdir -p ${{PROJECT_DIR}}/slurm/launch/logs")
+slurm.add_cmd(f"mkdir -p ${{CONTAINER_HOME}}")
+slurm.add_cmd(f"cd ${{PROJECT_DIR}}")
+```
+
+Next, add some logging to the launch script:
+
+```{python}
+slurm.add_cmd("""
+echo "================ Slurm tunnel test ================"
+echo "Date:         $(date)"
+echo "Host:         $(hostname)"
+echo "User:         $(whoami)"
+echo "Job ID:       ${SLURM_JOB_ID}"
+echo "Project:      ${PROJECT_DIR}"
+echo "SIF:          ${SIF}"
+echo "Home:         ${CONTAINER_HOME}"
+echo "Tunnel:       ${TUNNEL_NAME}"
+echo "==================================================="
+
+module purge
+""")
+```
+
+Finally, the runtime command:
+
+```{python}
+slurm.add_cmd(r"singularity exec --no-home --bind ${PROJECT_DIR}:/work ${SIF} bash --noprofile --norc -lc '" + " && ".join(runtime_command) + "'")
+```
+
+```{python}
+print(slurm)
+```
+
+And we write this to file:
+
+```{python}
+LAUNCH_SCRIPT = PROJECT_DIR / "slurm" / "launch" / "launch_container.sh"
+
+with open(LAUNCH_SCRIPT, "w") as f:
+    script = slurm.script(shell="bash")
+    f.write(script)
+    
+LAUNCH_SCRIPT.chmod(0o755)
+```
+
+```{python}
+Path(LAUNCH_SCRIPT).exists()
+```
