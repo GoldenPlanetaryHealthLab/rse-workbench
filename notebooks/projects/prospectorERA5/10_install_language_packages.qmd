@@ -1,0 +1,108 @@
+---
+title: "10 Install Language Package Layer"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook installs R and Python project packages after Spack and R have already been validated.
+
+Note that from here on out, you should be binding your fake $HOME directory
+to `CONTAINER_HOME`, and your fake $TMP directory to `CONTAINER_TMP`, so that R and Python package installations can write to a writable home and tmp directory.
+
+```{python}
+#| sorting-hat: remove
+import submitit
+from rse_workbench.helpers import show_submitit_job
+from rse_workbench.build_install import install_in_container
+```
+
+```{python}
+#| sorting-hat: remove
+executor = submitit.AutoExecutor(folder=str(project_contract.submitit_dir / "%j"))
+executor.update_parameters(
+    timeout_min=project_contract.slurm_build_hours * 60,
+    slurm_partition=project_contract.slurm_build_partition,
+    mem_gb=float(project_contract.slurm_build_mem.rstrip("G")),
+    cpus_per_task=project_contract.slurm_build_cpus,
+    slurm_job_name=f"install-langs-{project_contract.project_name}",
+    mail_user=project_contract.slurm_email,
+)
+```
+
+```{python}
+#| sorting-hat: remove
+LANGUAGE_INSTALL_COMMAND = r'''
+set -euo pipefail
+
+source /work/env/activate.sh
+
+which R
+which Rscript
+which rv
+which python3
+which uv
+
+rv init
+rv sync
+rv summary
+
+uv sync || true
+
+echo LANGUAGE_INSTALL_DONE
+'''
+```
+
+```{python}
+#| sorting-hat: remove
+job = executor.submit(
+    install_in_container,
+    project_dir=project_contract.project_dir,
+    SINGULARITY_IMAGE=project_contract.singularity_image,
+    runtime_command=LANGUAGE_INSTALL_COMMAND,
+)
+job.job_id
+```
+
+```{python}
+#| sorting-hat: remove
+result = show_submitit_job(job)
+if result is not None:
+    print(''.join(result['message']))
+```
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r"""
+set -euo pipefail
+
+source /work/env/activate.sh
+cd /work
+
+rv sync
+
+Rscript -e '
+cat("R.home(): ", R.home(), "\n\n")
+cat(".libPaths():\n")
+print(.libPaths())
+cat("\nknitr:\n")
+print(find.package("knitr"))
+cat("\nrmarkdown:\n")
+print(find.package("rmarkdown"))
+'
+
+quarto check knitr
+""",
+        image=project_contract.singularity_image,
+        options=[
+            "--home", f"{project_contract.container_home}:/home/rse",
+            "--bind", f"{project_contract.container_tmp}:/tmp",
+        ],
+        bind_project=project_contract.project_dir,
+    ),
+    tail=240,
+)
+```
+
+Stop here until language package installation succeeds.

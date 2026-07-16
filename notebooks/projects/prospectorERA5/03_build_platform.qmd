@@ -21,10 +21,11 @@ The following code may take some time as it runs in the foreground:
 
 ```{python}
 Client.build(
-    image=str(project_contract.singularity_def),
-    recipe=str(project_contract.base_image),
-    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    image=str(project_contract.singularity_image),
+    recipe=str(project_contract.singularity_def),
+    options=["--fakeroot", "--sandbox", "--fix-perms"],
     sudo=False,
+    force=True
 )
 ```
 
