@@ -20,10 +20,13 @@ from rse_workbench.helpers import spython_exec, show_spython
 The following code may take some time as it runs in the foreground:
 
 ```{python}
+options = ["--fakeroot", "--fix-perms", "--force"]
+if project_contract.image_mode == "sandbox":
+    options.append("--sandbox")
 Client.build(
-    image=str(project_contract.singularity_def),
-    recipe=str(project_contract.base_image),
-    options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
+    image=str(project_contract.singularity_image),
+    recipe=str(project_contract.singularity_def),
+    options=options,
     sudo=False,
 )
 ```
@@ -33,6 +36,14 @@ Client.build(
 If the installables in the previous notebook are correct,
 the platform image should pass the following tests.
 Feel free to add more if you need!
+
+Note that from here on out, you should not be using
+the project_contract.base_image variable, but rather
+the project_contract.singularity_image variable. The 
+base image is only used to select the initial platform image —
+if the above worked, then the platform image is now 
+built and ready to be used, whether its in `tmp` or in
+the project `.devcontainer` folder.
 
 ```{python}
 show_spython(
@@ -55,7 +66,7 @@ uv --version
 code --version
 quarto --version
 ''',
-        image=project_contract.base_image,
+        image=project_contract.singularity_image,
         options=["--no-home"],
     ),
     tail=120,
