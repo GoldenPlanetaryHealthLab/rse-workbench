@@ -78,14 +78,48 @@ DEFAULT_PYTHON_PACKAGES = [
 ]
 ```
 
-Add some expected project packages; we know we'll need these based on the scripts we were given:
-
 ```{python}
 DEFAULT_R_PACKAGES.extend([
     "sf",
-    "exactextractr",
-    "terra",
-    "dplyr"
+    "nanoparquet",
+    "janitor",
+    "lubridate",
+    "frictionless",
+    "pkgsite",
+    "rdhs",
+        "box", # we use this for namespacing and dependency injection
+    "remotes",
+    "rprojroot", # always travel with this
+    "stringi",
+    "targets",
+    "tarchetypes",
+    "usethis",
+    "httpgd",
+    "httpuv",
+    "parsermd",
+    "rmarkdown",
+    "skimr",
+    "DiagrammeR",
+    "svglite",
+    "later",
+    "rstudioapi",
+    "dplyr",
+    "languageserver",
+    "here",
+    "fledge",
+    "readr",
+    "stringr",
+    "withr",
+    "readxl",
+    "tidyverse",
+    "websocket",
+    "codetools",
+    "quarto",
+    "rlang",
+    "purrr",
+    "tibble",
+    "devtools",
+    "jsonlite"
 ])
 ```
 
@@ -106,14 +140,14 @@ from rse_workbench.datascience import (
 rproject = default_rproject(
     project_name=project_contract.project_name,
     r_version=project_contract.r_version,
-    packages=DEFAULT_R_PACKAGES,
+    packages=list(set(DEFAULT_R_PACKAGES)),
     git_dependencies=DEFAULT_R_GIT_DEPENDENCIES,
 )
 
 pyproject = default_pyproject(
     project_name=project_contract.project_name,
     python_version=project_contract.python_version,
-    packages=DEFAULT_PYTHON_PACKAGES,
+    packages=list(set(DEFAULT_PYTHON_PACKAGES)),
 )
 
 write_rproject_toml(project_contract.rproject_toml, rproject)

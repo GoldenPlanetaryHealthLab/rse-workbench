@@ -22,95 +22,6 @@ Do not install the environment here, yet. Simply define the
 system dependencies that Spack can provide:
 
 ```{python}
-#| sorting-hat: keep
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Any
-
-import yaml
-
-
-def _dedupe(items: list[str]) -> list[str]:
-    seen = set()
-    result = []
-    for item in items:
-        if item not in seen:
-            result.append(item)
-            seen.add(item)
-    return result
-
-
-def default_spack_env(
-    *,
-    r_version: str,
-    python_version: str,
-    extra_specs: list[str] | None = None,
-    default_specs: list[str] = [
-        "libiconv",
-        "ncurses",
-        "openblas",
-        "curl",
-        "openssl",
-        "pkgconf",
-        "abseil-cpp",
-        "zlib",
-        "zlib-ng+compat",
-        "cmake",
-        "gmake",
-        "git",
-        "libx11",
-        "libxml2",
-        "freetype",
-        "libjpeg",
-        "libjpeg-turbo",
-        "libpng",
-        "libtiff",
-        "libwebp +libwebpmux",
-        "icu4c",
-        "fontconfig",
-        "fribidi",
-        "harfbuzz",
-        "libgit2",
-        "cairo",
-        "readline",
-        "libuv",
-    ]
-) -> dict[str, Any]:
-    """Return a default system-dependency-only Spack environment."""
-
-    specs = [f"r@{r_version}", f"python@{python_version}"]
-    specs.extend(default_specs)
-    specs.extend(extra_specs or [])
-
-    return {
-        "spack": {
-            "specs": _dedupe(specs),
-            "view": "/work/.spack-env/view",
-            "config": {
-                "install_tree": {"root": "/work/.spack-env/install"},
-                "source_cache": "/work/.spack/cache/source",
-                "misc_cache": "/work/.spack/cache/misc",
-                "build_stage": ["/work/.spack/stage"],
-                "shared_linking": {
-                    "type": "rpath",
-                    "missing_library_policy": "error",
-                },
-            },
-        }
-    }
-
-
-def write_spack_yaml(path: Path, spack_env: dict[str, Any]) -> Path:
-    """Write spack.yaml idempotently, creating parent directories first."""
-    import yaml
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(spack_env, sort_keys=False))
-    return path
-```
-
-```{python}
 #| sorting-hat: remove
 from rse_workbench.sci_sysdeps import default_spack_env, write_spack_yaml
 ```
@@ -161,7 +72,8 @@ We can extend the default specs with some simple Python:
 ```{python}
 #| sorting-hat: remove
 DEFAULT_SYSTEM_SPECS.extend([
-    "glpk", "libxml2", "flexiblas", "proj", "geos", "gdal"
+    "glpk", "libxml2", "flexiblas", "proj", "geos", "gdal", # we know there is geospatial data here
+    "arrow"
 ])
 ```
 
@@ -170,15 +82,141 @@ R's `pak::pkg_sysreqs()` function. If you need to customize the compiler
 or any other configuration, do so in the dictionary below, and
 the changes will reflect when you run `write_spack_yaml()`.
 
+
+::: {.callout-important}
+
+## Choosing a portable Spack build target
+
+Building this environment required us to consider its **processor target**.
+
+Imagine the HPC cluster as a library containing many Linux laptops. When you
+start an interactive session or submit a batch job, Slurm assigns you one of
+those laptops. When it's ready, they hand it to you, but they've booted it up
+with some basic configurations, and you want to install some more stuff on it
+to run your project.
+
+All the laptops may run the same operating system, but while containing
+different generations of Intel or AMD processors internally.
+
+Spack installs a project's software and its dependencies, but compiled software
+(ie software that is built from the lowest level, interfacing with the hardware processor)
+must also be built for a particular class of processor. By default, Spack may
+select this **"target"** based on the node where the environment is concretized. If that
+node has a newer processor, the compiler may generate instructions that are not
+available on older nodes. The resulting environment may then fail when Slurm
+runs the project on a different kind of node.
+
+The relevant Spack setting is `target`. This variable tells Spack and the 
+compiler which processor instructions the resulting software may assume are available.
+
+For example:
+
+```yaml
+packages:
+  all:
+    target:
+      - x86_64
+```
+
+This requests a conservative 64-bit x86 target. It sacrifices some
+processor-specific optimization in exchange for compatibility across a broader
+range of Intel and AMD processors.
+
+A more specific target, such as `sapphirerapids`, permits newer processor
+instructions and may improve performance, but software built for that target
+must only run on compatible nodes. In that case, the Spack target should be
+paired with an appropriate Slurm partition or hardware constraint.
+
+FASRC exposes compute resources through Slurm partitions. The `spart` command
+lists the partitions available to the current user:
+
+| Partition | State | Cores | GPUs | Average Mem/Node (GB) | Nodes | Time Limit |
+|---|:---:|---:|---:|---:|---:|:---:|
+| hsph | UP | 6,272 | 0 | 1,007 | 56 | 3-00:00:00 |
+| hsph_gpu | UP | 128 | 8 | 1,511 | 2 | 3-00:00:00 |
+| bigmem | UP | 448 | 0 | 2,015 | 4 | 3-00:00:00 |
+| bigmem_intermediate | UP | 192 | 0 | 2,015 | 3 | 14-00:00:00 |
+| gpu | UP | 2,304 | 144 | 1,007 | 36 | 3-00:00:00 |
+| gpu_h200 | UP | 2,464 | 88 | 1,007 | 22 | 3-00:00:00 |
+| gpu_requeue | UP | 33,456 | 1,932 | 1,266 | 436 | 3-00:00:00 |
+| gpu_test | UP | 768 | 96 | 503 | 12 | 12:00:00 |
+| intermediate | UP | 1,344 | 0 | 1,007 | 12 | 14-00:00:00 |
+| remoteviz | UP | 32 | 0 | 377 | 1 | 3-00:00:00 |
+| sapphire | UP | 20,608 | 0 | 1,007 | 184 | 3-00:00:00 |
+| serial_requeue | UP | 119,408 | 1,932 | 670 | 1,708 | 3-00:00:00 |
+| shared | UP | 17,760 | 0 | 188 | 370 | 3-00:00:00 |
+| test | UP | 2,240 | 0 | 1,007 | 20 | 12:00:00 |
+| unrestricted | UP | 384 | 0 | 188 | 8 | 365-00:00:00 |
+
+Partitions describe scheduling pools and resource limits; they do not necessarily
+identify a single processor architecture. In particular, large requeue
+partitions may draw from heterogeneous hardware. Use commands such as
+`scontrol show partition` and `scontrol show node` to inspect the resources and
+features associated with a partition or node.
+
+WHen initially building this project, we ran into issues that gave errors like:
+
+```
+> CMake Warning:
+    Manually-specified variables were not used by the project:
+  
+      CMAKE_FIND_USE_PACKAGE_REGISTRY
+  
+  
+  -- Build files have been written to: /work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-build-qzlgbo2
+-- lines 66 to 87 --
+  /work/.spack-env/install/linux-sapphirerapids/compiler-wrapper-1.1.0-uc7pl4wsdw2kwyikq22zuvtthmbwgfbg/libexec/spack/gcc/gcc  -I/work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-src -O2 -DNDEBUG -std=gnu99 -Wall -Wdeclaration-after-statement -Wimplicit-fallthrough -Wmissing-field-initializers -Wmissing-prototypes -Wpedantic -Wshadow -Wstrict-prototypes -Wundef -Wvla -MD -MT CMakeFiles/libdeflate_static.dir/lib/deflate_compress.c.o -MF CMakeFiles/libdeflate_static.dir/lib/deflate_compress.c.o.d -o CMakeFiles/libdeflate_static.dir/lib/deflate_compress.c.o -c /work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-src/lib/deflate_compress.c
+  [ 17%] Building C object CMakeFiles/libdeflate_static.dir/lib/deflate_decompress.c.o
+  /work/.spack-env/install/linux-sapphirerapids/compiler-wrapper-1.1.0-uc7pl4wsdw2kwyikq22zuvtthmbwgfbg/libexec/spack/gcc/gcc  -I/work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-src -O2 -DNDEBUG -std=gnu99 -Wall -Wdeclaration-after-statement -Wimplicit-fallthrough -Wmissing-field-initializers -Wmissing-prototypes -Wpedantic -Wshadow -Wstrict-prototypes -Wundef -Wvla -MD -MT CMakeFiles/libdeflate_static.dir/lib/deflate_decompress.c.o -MF CMakeFiles/libdeflate_static.dir/lib/deflate_decompress.c.o.d -o CMakeFiles/libdeflate_static.dir/lib/deflate_decompress.c.o -c /work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-src/lib/deflate_decompress.c
+  [ 20%] Building C object CMakeFiles/libdeflate_static.dir/lib/adler32.c.o
+  /work/.spack-env/install/linux-sapphirerapids/compiler-wrapper-1.1.0-uc7pl4wsdw2kwyikq22zuvtthmbwgfbg/libexec/spack/gcc/gcc  -I/work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-src -O2 -DNDEBUG -std=gnu99 -Wall -Wdeclaration-after-statement -Wimplicit-fallthrough -Wmissing-field-initializers -Wmissing-prototypes -Wpedantic -Wshadow -Wstrict-prototypes -Wundef -Wvla -MD -MT CMakeFiles/libdeflate_static.dir/lib/adler32.c.o -MF CMakeFiles/libdeflate_static.dir/lib/adler32.c.o.d -o CMakeFiles/libdeflate_static.dir/lib/adler32.c.o -c /work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-src/lib/adler32.c
+  /tmp/ccCw1jdp.s: Assembler messages:
+> /tmp/ccCw1jdp.s:171: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:172: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:176: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:177: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:178: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:202: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:203: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:308: Error: unsupported instruction `vpdpbusd'
+> /tmp/ccCw1jdp.s:309: Error: unsupported instruction `vpdpbusd'
+> make[2]: *** [CMakeFiles/libdeflate_static.dir/build.make:152: CMakeFiles/libdeflate_static.dir/lib/adler32.c.o] Error 1
+  make[2]: Leaving directory '/work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-build-qzlgbo2'
+> make[1]: *** [CMakeFiles/Makefile2:118: CMakeFiles/libdeflate_static.dir/all] Error 2
+  make[1]: Leaving directory '/work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2/spack-build-qzlgbo2'
+> make: *** [Makefile:139: all] Error 2
+  Command exited with status 2:
+      /work/.spack-env/install/linux-sapphirerapids/gmake-4.4.1-motbdq25c7lu4gmektvz6jelu2wmk4q4/bin/make
+==> Error: The following packages failed to install:
+libdeflate@1.25/qzlgbo2fiahzkwumq4hj34g7gnfl3tw2: /work/.spack/stage/ttapera/spack-stage-libdeflate-1.25-qzlgbo2fiahzkwumq4hj34g7gnfl3tw2-_nwza6ec.log
+```
+
+`vpdpbusd` is a pretty deep error, emanating from the compiler itself. This is
+evidence that we need to intervent and specify the target for the Spack build.
+
+For this project, we use `x86_64` as a deliberately conservative target so that
+the environment is not accidentally tied to the processor of the node on which
+it was built. A more optimized target can be adopted later after documenting
+the processor architectures available to the project's Slurm partitions and
+the scheduling constraints required to select them.
+:::
+
+
 ```{python}
 #| sorting-hat: remove
 spack_env = {
     "spack": {
-        "specs": list(set(DEFAULT_SYSTEM_SPECS)),
+        "specs": sorted(set(DEFAULT_SYSTEM_SPECS)),
+        "concretizer": {
+            "unify": "when_possible",
+            "reuse": False,
+        },
         "view": "/work/.spack-env/view",
         "packages": {
             "all": {
-                "compiler": ["gcc@11.5.0"]
+                "require": [
+                    "target=x86_64",
+                ]
             }
         },
         "config": {

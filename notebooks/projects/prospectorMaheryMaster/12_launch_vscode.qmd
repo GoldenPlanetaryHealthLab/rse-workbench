@@ -1,0 +1,101 @@
+---
+title: "12 Launch VS Code Tunnel"
+format: gfm
+execute:
+  eval: false
+---
+
+This notebook writes the VS Code launch script.
+
+The launch script should not install packages. It assumes prior notebooks have already installed and validated the environment.
+
+```{python}
+from simple_slurm import Slurm
+from pathlib import Path
+```
+
+Importantly, we add a "clean" argument here; if True, it'll remove any existing
+cached VSCode tunnel state found in `CONTAINER_HOME/.vscode-server`. This is 
+useful if you want to reset the VSCode tunnel state, but it will also remove 
+any cached extensions and settings. If you want to preserve your VSCode tunnel 
+state, set `clean` to False.
+
+```{python}
+clean = True
+
+runtime_command = [
+    "set -euo pipefail",
+    "source /work/env/activate.sh",
+    "cd /work",
+    "which code",
+    "code tunnel user login --provider github",
+    "rm -rf /home/rse/.vscode-server" if clean else "echo 'Preserving existing VSCode tunnel state'",
+    f"code tunnel --accept-server-license-terms --name {project_contract.project_name}",
+]
+runtime_command
+```
+
+```{python}
+slurm = Slurm(
+    job_name=f"{project_contract.project_name}-vscode",
+    cpus_per_task=project_contract.slurm_build_cpus,
+    mem=project_contract.slurm_build_mem,
+    time="04:00:00",
+    partition=project_contract.slurm_build_partition,
+    mail_user=project_contract.slurm_email,
+    output=str(project_contract.launch_log_dir / "launch-%j.out"),
+    error=str(project_contract.launch_log_dir / "launch-%j.err"),
+)
+
+slurm.add_cmd("set -o errexit -o nounset -o pipefail")
+slurm.add_cmd(f'PROJECT_DIR="{project_contract.project_dir}"')
+slurm.add_cmd('SIF="${PROJECT_DIR}/.devcontainer/Singularity.sif"')
+slurm.add_cmd('CONTAINER_HOME="${PROJECT_DIR}/.container-home"')
+slurm.add_cmd('CONTAINER_TMP="${PROJECT_DIR}/.container-tmp"')
+slurm.add_cmd('mkdir -p "${PROJECT_DIR}/slurm/launch/logs"')
+slurm.add_cmd('mkdir -p "${CONTAINER_HOME}" "${CONTAINER_TMP}"')
+slurm.add_cmd('cd "${PROJECT_DIR}"')
+```
+
+```{python}
+slurm.add_cmd(r'''
+echo "=================== Slurm sitrep =================="
+echo "Date:         $(date)"
+echo "Host:         $(hostname)"
+echo "User:         $(whoami)"
+echo "Job ID:       ${SLURM_JOB_ID}"
+echo "Project:      ${PROJECT_DIR}"
+echo "SIF:          ${SIF}"
+echo "Home:         ${CONTAINER_HOME}"
+echo "Tmp:          ${CONTAINER_TMP}"
+echo "==================================================="
+
+module purge
+''')
+```
+
+```{python}
+container_command = " && ".join(runtime_command)
+
+slurm.add_cmd(
+    r'''singularity exec \
+  --bind "${PROJECT_DIR}:/work" \
+  --home "${CONTAINER_HOME}:/home/rse" \
+  --bind "${CONTAINER_TMP}:/tmp" \
+  "${SIF}" \
+  bash --noprofile --norc -lc ''' + repr(container_command)
+)
+```
+
+```{python}
+project_contract.launch_script.parent.mkdir(parents=True, exist_ok=True)
+project_contract.launch_script.write_text(slurm.script(convert=False))
+project_contract.launch_script.chmod(0o755)
+print(project_contract.launch_script.read_text())
+```
+
+Launch manually from the project directory:
+
+```bash
+sbatch "$LAUNCHSCRIPT"
+```

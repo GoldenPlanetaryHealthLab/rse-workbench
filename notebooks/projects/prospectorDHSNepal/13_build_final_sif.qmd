@@ -1,35 +1,45 @@
 ---
-title: "12 Build Final SIF"
+title: "13 Build Final SIF"
 format: gfm
 execute:
   eval: false
+filters:
+  - sorting-hat
+  - ripper
+extensions:
+  ripper:
+    output-name: "build_final_sif"
+    output-dir: "../../src/rse_workbench"
+  sorting-hat:
+    keep: python
 ---
 
 This notebook builds the final read-only SIF from the validated platform definition.
 
-
 ```{python}
+#| sorting-hat: remove
 import submitit
-from rse_workbench.helpers import show_submitit_job
-from rse_workbench.build_install import build_container
+from rse_workbench.helpers import show_submitit_job, spython_exec, show_spython
+from rse_workbench.build_install import build_container, install_in_container
 ```
 
 Build: 
 
 ```{python}
-executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+#| sorting-hat: remove
+executor = submitit.AutoExecutor(folder=str(project_contract.submitit_dir / "%j"))
 executor.update_parameters(
-    timeout_min=SLURM_HOURS * 60,
-    slurm_partition=SLURM_PARTITION,
-    mem_gb=float(SLURM_MEM.rstrip("G")),
-    cpus_per_task=SLURM_CPUS,
-    slurm_job_name=f"build-{PROJECT_NAME}-container",
-    mail_user=SLURM_EMAIL,
+    timeout_min=project_contract.slurm_build_hours * 60,
+    slurm_partition=project_contract.slurm_build_partition,
+    mem_gb=float(project_contract.slurm_build_mem.rstrip("G")),
+    cpus_per_task=project_contract.slurm_build_cpus,
+    slurm_job_name=f"build-{project_contract.project_name}-container",
+    mail_user=project_contract.slurm_email,
 )
 ```
 
 ```{python}
-job = executor.submit(build_container, SINGULARITY_DEF, SINGULARITY_IMAGE)
+job = executor.submit(build_container, project_contract.singularity_def, project_contract.singularity_image)
 job.job_id
 ```
 
@@ -42,11 +52,15 @@ if result is not None:
 Install Spack and System Dependencies:
 
 ```{python}
+executor.update_parameters(
+    slurm_job_name=f"install-{project_contract.project_name}-spack",
+)
+
 job = executor.submit(
     install_in_container,
-    project_dir=PROJECT_DIR,
-    SINGULARITY_IMAGE=SINGULARITY_IMAGE,
-    runtime_command=SPACK_INSTALL_COMMAND,
+    project_dir=project_contract.project_dir,
+    SINGULARITY_IMAGE=project_contract.singularity_image,
+    runtime_command=project_contract.spack_install_command,
 )
 job.job_id
 ```
@@ -62,9 +76,9 @@ Install Data Science Languages and Packages:
 ```{python}
 job = executor.submit(
     install_in_container,
-    project_dir=PROJECT_DIR,
-    SINGULARITY_IMAGE=SINGULARITY_IMAGE,
-    runtime_command=LANGUAGE_INSTALL_COMMAND,
+    project_dir=project_contract.project_dir,
+    SINGULARITY_IMAGE=project_contract.singularity_image,
+    runtime_command=project_contract.language_install_command,
 )
 job.job_id
 ```
@@ -406,3 +420,25 @@ Render
 The first failing step identifies the boundary where integration has broken.
 
 There is no benefit to debugging components beyond the first failed contract.
+
+
+```{python}
+show_spython(
+    spython_exec(
+        command=r'''
+set -euo pipefail
+echo "PATH=$PATH"
+cd /work
+source /work/env/activate.sh
+
+quarto render dev
+''',
+        image=SINGULARITY_IMAGE,
+        options=[
+            "--home", f"{CONTAINER_HOME}:/home/rse",
+            "--bind", f"{CONTAINER_TMP}:/tmp",
+        ],
+        bind_project=PROJECT_DIR,
+    ),
+)   
+```

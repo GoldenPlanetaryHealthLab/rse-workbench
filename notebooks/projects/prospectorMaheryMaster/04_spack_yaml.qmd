@@ -61,16 +61,49 @@ DEFAULT_SYSTEM_SPECS = [
     "cairo +X",
     "readline",
     "libuv",
-    "udunits"    
+    "udunits",
+    "libiconv",
+    "ncurses",
+    "openblas",
+    "curl",
+    "openssl",
+    "pkgconf",
+    "abseil-cpp",
+    "zlib",
+    "zlib-ng+compat",
+    "cmake",
+    "gmake",
+    "git",
+    "libx11",
+    "libxml2",
+    "freetype",
+    "libjpeg",
+    "libjpeg-turbo",
+    "libpng",
+    "libtiff",
+    "libwebp +libwebpmux",
+    "icu4c",
+    "fontconfig",
+    "fribidi",
+    "harfbuzz",
+    "libgit2",
+    "cairo",
+    "readline",
+    "libuv",
+    "libgit2"
 ]
-```
 
+DEFAULT_SYSTEM_SPECS.extend([
+    "proj",
+    "geos",
+    "gdal",
+    "udunits",
+    "libuv",
+    "zlib",
+    "r-udunits2",
+    "rust"
+])
 
-
-We can extend the default specs with some simple Python:
-
-```{python}
-#| sorting-hat: remove
 DEFAULT_SYSTEM_SPECS.extend([
     "glpk", "libxml2", "flexiblas", "proj", "geos", "gdal"
 ])

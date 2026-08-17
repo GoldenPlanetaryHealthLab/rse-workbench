@@ -1,5 +1,5 @@
 ---
-title: "03 Scientific System Dependency Layer"
+title: "04 Scientific System Dependency Layer"
 format: gfm
 execute:
   eval: false
@@ -8,7 +8,7 @@ filters:
   - ripper
 extensions:
   ripper:
-    output-name: "sci_sysdeps"
+    output-name: "sysdep_stack"
     output-dir: "../../src/rse_workbench"
   sorting-hat:
     keep: python
@@ -18,11 +18,15 @@ This notebook writes `spack.yaml`. It should only answer:
 
 > What scientific system dependencies does this project require?
 
-Do not install the environment here.
+Do not install the environment here, yet. Simply define the 
+system dependencies that Spack can provide:
 
 ```{python}
+#| sorting-hat: remove
 from rse_workbench.sci_sysdeps import default_spack_env, write_spack_yaml
 ```
+
+The following is what I typically see necessary for R and Python computing:
 
 ```{python}
 #| sorting-hat: remove
@@ -57,49 +61,64 @@ DEFAULT_SYSTEM_SPECS = [
     "cairo +X",
     "readline",
     "libuv",
+    "udunits",
+    "libiconv",
+    "ncurses",
+    "openblas",
+    "curl",
+    "openssl",
+    "pkgconf",
+    "abseil-cpp",
+    "zlib",
+    "zlib-ng+compat",
+    "cmake",
+    "gmake",
+    "git",
+    "libx11",
+    "libxml2",
+    "freetype",
+    "libjpeg",
+    "libjpeg-turbo",
+    "libpng",
+    "libtiff",
+    "libwebp +libwebpmux",
+    "icu4c",
+    "fontconfig",
+    "fribidi",
+    "harfbuzz",
+    "libgit2",
+    "cairo",
+    "readline",
+    "libuv",
+    "libgit2"
+]
+
+DEFAULT_SYSTEM_SPECS.extend([
     "proj",
     "geos",
     "gdal",
     "udunits",
+    "libuv",
+    "zlib",
     "r-udunits2",
-]
-```
+    "rust"
+])
 
-```
-dnf install -y epel-release
-dnf install -y dnf-plugins-core
-dnf config-manager --set-enabled crb
-dnf install -y epel-release
-dnf install -y epel-release
-dnf install -y dnf-plugins-core
-dnf config-manager --set-enabled crb
-dnf install -y dnf-plugins-core
-dnf config-manager --set-enabled crb
-dnf install -y epel-release
-dnf install -y dnf-plugins-core
-dnf config-manager --set-enabled crb
-dnf install -y epel-release
-dnf install -y git libicu-devel glpk-devel libxml2-devel cmake make libuv-devel libX11-devel libcurl-devel openssl-devel libgit2-devel fontconfig-devel freetype-devel cairo-devel libpng-devel libtiff-devel zlib-devel \
-  fribidi-devel harfbuzz-devel libjpeg-turbo-devel libwebp-devel abseil-cpp-devel gdal-devel gdal geos-devel proj-devel sqlite-devel udunits2-devel
-```
-
-We can extend the default specs with Python:
-
-```{python}
 DEFAULT_SYSTEM_SPECS.extend([
-    "glpk"
+    "glpk", "libxml2", "flexiblas", "proj", "geos", "gdal"
 ])
 ```
 
 It can be useful to predict the system dependencies using
-R's `pak::pkg_sysreqs()` function.
-
+R's `pak::pkg_sysreqs()` function. If you need to customize the compiler
+or any other configuration, do so in the dictionary below, and
+the changes will reflect when you run `write_spack_yaml()`.
 
 ```{python}
 #| sorting-hat: remove
 spack_env = {
     "spack": {
-        "specs": DEFAULT_SYSTEM_SPECS,
+        "specs": list(set(DEFAULT_SYSTEM_SPECS)),
         "view": "/work/.spack-env/view",
         "packages": {
             "all": {
@@ -119,13 +138,13 @@ spack_env = {
     }
 }
 
-write_spack_yaml(SPACK_YAML_PATH, spack_env)
-SPACK_YAML_PATH
+write_spack_yaml(project_contract.spack_yaml, spack_env)
+project_contract.spack_yaml
 ```
 
 ```{python}
 #| sorting-hat: remove
-print(SPACK_YAML_PATH.read_text())
+print(project_contract.spack_yaml.read_text())
 ```
 
 Stop here. The next notebook writes language package declarations.

@@ -1,5 +1,5 @@
 ---
-title: "06 Validate Activation"
+title: "07 Validate Activation"
 format: gfm
 execute:
   eval: false
@@ -10,6 +10,7 @@ This notebook tests only project activation.
 Do not install Spack packages. Do not run `rv sync`. Do not run Quarto checks.
 
 ```{python}
+#| sorting-hat: remove
 from rse_workbench.helpers import spython_exec, show_spython
 ```
 
@@ -32,12 +33,13 @@ which python3
 spack debug report
 spack env status
 ''',
-        image=SINGULARITY_IMAGE,
+        image=project_contract.build_image,
         options=["--no-home"],
-        bind_project=PROJECT_DIR,
+        bind_project=project_contract.project_dir,
     )
 )
 ```
+
 
 Expected result:
 

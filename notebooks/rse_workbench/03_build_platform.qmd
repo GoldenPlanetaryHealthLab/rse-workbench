@@ -20,9 +20,15 @@ from rse_workbench.helpers import spython_exec, show_spython
 The following code may take some time as it runs in the foreground:
 
 ```{python}
+options = ["--fakeroot", "--fix-perms", "--force"]
+if project_contract.image_mode == "sandbox" and project_contract.singularity_image.suffix != ".sif":
+    options.append("--sandbox")
+elif project_contract.image_mode == "sandbox" and project_contract.singularity_image.suffix == ".sif":
+    raise ValueError("WARNING: You are in sandbox mode, but the singularity image is a .sif file. This will not work. Please change the image mode to 'build' or change the singularity image to a sandbox directory.")
+    
 Client.build(
-    image=str(project_contract.singularity_def),
-    recipe=str(project_contract.base_image),
+    image=str(project_contract.build_image),
+    recipe=str(project_contract.singularity_def),
     options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
     sudo=False,
 )
@@ -55,7 +61,7 @@ uv --version
 code --version
 quarto --version
 ''',
-        image=project_contract.base_image,
+        image=project_contract.build_image,
         options=["--no-home"],
     ),
     tail=120,

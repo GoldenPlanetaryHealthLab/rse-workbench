@@ -20,61 +20,12 @@ Installation will usually work, but you can use this notebook to debug installat
 
 Do not run `rv sync`, `uv sync`, Quarto checks, or VS Code, yet.
 
-```{python}
-#| sorting-hat: keep
-from pathlib import Path
-from typing import Any
-from spython.main import Client
-from pathlib import Path
-import os
-
-def install_in_container(
-    project_dir: Path,
-    SINGULARITY_IMAGE: Path,
-    runtime_command: str = INSTALL_RUNTIME_COMMAND,
-) -> dict[str, Any]:
-    """Install the project Spack and data science environments inside the final SIF."""
-
-
-    project_dir = Path(project_dir)
-    SINGULARITY_IMAGE = Path(SINGULARITY_IMAGE)
-
-    container_home = project_dir / ".container-home"
-    container_tmp = project_dir / ".container-tmp"
-
-    container_home.mkdir(parents=True, exist_ok=True)
-    container_tmp.mkdir(parents=True, exist_ok=True)
-
-    os.environ.update({
-        "SINGULARITYENV_R_LIBS": "",
-        "SINGULARITYENV_R_LIBS_USER": "",
-        "SINGULARITYENV_R_LIBS_SITE": "",
-        "SINGULARITYENV_SPACK_DISABLE_LOCAL_CONFIG": "true",
-    })
-
-    options = [
-        "--cleanenv",
-        "--home", f"{container_home}:/home/rse",
-        "--bind", f"{project_dir}:/work",
-        "--bind", f"{container_tmp}:/tmp",
-    ]
-
-    return Client.execute(
-        image=str(SINGULARITY_IMAGE),
-        command=["bash", "--noprofile", "--norc", "-lc", runtime_command],
-        options=options,
-        sudo=False,
-        return_result=True,
-    )
-
-```
-
 
 ```{python}
 #| sorting-hat: remove
 import submitit
 from rse_workbench.helpers import show_submitit_job
-from rse_workbench.install_spack import install_in_container
+from rse_workbench.build_install import install_in_container
 ```
 
 ```{python}
@@ -114,7 +65,7 @@ echo SPACK_INSTALL_DONE
 job = executor.submit(
     install_in_container,
     project_dir=project_contract.project_dir,
-    SINGULARITY_IMAGE=project_contract.singularity_image,
+    SINGULARITY_IMAGE=project_contract.build_image,
     runtime_command=SPACK_INSTALL_COMMAND,
 )
 job.job_id

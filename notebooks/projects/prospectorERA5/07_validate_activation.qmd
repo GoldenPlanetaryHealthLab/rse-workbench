@@ -33,7 +33,7 @@ which python3
 spack debug report
 spack env status
 ''',
-        image=project_contract.base_image,
+        image=project_contract.build_image,
         options=["--no-home"],
         bind_project=project_contract.project_dir,
     )

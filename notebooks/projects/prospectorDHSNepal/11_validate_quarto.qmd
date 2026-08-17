@@ -1,5 +1,5 @@
 ---
-title: "10 Validate Quarto"
+title: "11 Validate Quarto"
 format: gfm
 execute:
   eval: false
@@ -24,12 +24,12 @@ which quarto
 quarto --version
 quarto check all
 ''',
-        image=SINGULARITY_IMAGE,
+        image=project_contract.singularity_image,
         options=[
-            "--home", f"{CONTAINER_HOME}:/home/rse",
-            "--bind", f"{CONTAINER_TMP}:/tmp",
+            "--home", f"{project_contract.container_home}:/home/rse",
+            "--bind", f"{project_contract.container_tmp}:/tmp",
         ],
-        bind_project=PROJECT_DIR,
+        bind_project=project_contract.project_dir,
     ),
 )
 ```
@@ -58,12 +58,12 @@ QMD
 quarto render /tmp/quarto-minimal.qmd --output-dir /tmp/quarto-minimal-output
 ls -lah /tmp/quarto-minimal-output
 ''',
-        image=SINGULARITY_IMAGE,
+        image=project_contract.singularity_image,
         options=[
-            "--home", f"{CONTAINER_HOME}:/home/rse",
-            "--bind", f"{CONTAINER_TMP}:/tmp",
+            "--home", f"{project_contract.container_home}:/home/rse",
+            "--bind", f"{project_contract.container_tmp}:/tmp",
         ],
-        bind_project=PROJECT_DIR,
+        bind_project=project_contract.project_dir,
     ),
     tail=200,
 )

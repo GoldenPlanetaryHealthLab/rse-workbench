@@ -16,43 +16,11 @@ extensions:
 
 This notebook builds the final read-only SIF from the validated platform definition.
 
-#| sorting-hat: keep
-from __future__ import annotations
-
-def build_container(singularity_def, SINGULARITY_IMAGE):
-    from spython.main import Client
-    from pathlib import Path
-    import os
-
-    job_id = os.environ.get("SLURM_JOB_ID", "local")
-    user = os.environ["USER"]
-    tmp_root = Path(f"/tmp/{user}-rse-workbench-{job_id}")
-    singularity_tmp = tmp_root / "singularity-tmp"
-    singularity_cache = tmp_root / "singularity-cache"
-
-    singularity_tmp.mkdir(parents=True, exist_ok=True)
-    singularity_cache.mkdir(parents=True, exist_ok=True)
-
-    os.environ["SINGULARITY_TMPDIR"] = str(singularity_tmp)
-    os.environ["SINGULARITY_CACHEDIR"] = str(singularity_cache)
-    os.environ["APPTAINER_TMPDIR"] = str(singularity_tmp)
-    os.environ["APPTAINER_CACHEDIR"] = str(singularity_cache)
-
-    return Client.build(
-        image=str(SINGULARITY_IMAGE),
-        recipe=str(singularity_def),
-        options=["--fakeroot", "--force"],
-        sudo=False,
-        return_result=True,
-    )
-
-```
-
 ```{python}
 #| sorting-hat: remove
 import submitit
 from rse_workbench.helpers import show_submitit_job, spython_exec, show_spython
-from rse_workbench.build_install import build_container
+from rse_workbench.build_install import build_container, install_in_container
 ```
 
 Build: 
@@ -84,11 +52,15 @@ if result is not None:
 Install Spack and System Dependencies:
 
 ```{python}
+executor.update_parameters(
+    slurm_job_name=f"install-{project_contract.project_name}-spack",
+)
+
 job = executor.submit(
     install_in_container,
     project_dir=project_contract.project_dir,
     SINGULARITY_IMAGE=project_contract.singularity_image,
-    runtime_command=project_contract.spack_install_command,
+    runtime_command=SPACK_INSTALL_COMMAND,
 )
 job.job_id
 ```

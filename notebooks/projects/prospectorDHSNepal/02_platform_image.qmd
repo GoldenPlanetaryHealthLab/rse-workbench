@@ -1,5 +1,5 @@
 ---
-title: "01 Platform Image"
+title: "02 Platform Image"
 format: gfm
 execute:
   eval: false
@@ -8,7 +8,7 @@ filters:
   - ripper
 extensions:
   ripper:
-    output-name: "platform_contract"
+    output-name: "platform_image"
     output-dir: "../../src/rse_workbench"
   sorting-hat:
     keep: python
@@ -22,9 +22,23 @@ Singularity. It should only answer:
 
 The platform image must not yet know about `/work/.spack-env/view`, `R_HOME`, `rv` libraries, Quarto project extensions, or project-specific activation.
 
+We import the `Installable` class, which allows us to define additional platform-level tools, like `code`, 
+`rv`, `uv`, and `quarto`. These tools are installed in the platform image, and are available to all projects 
+that use this platform image.
+
 ```{python}
-from rse_workbench.platform_contract import Installable
-from rse_workbench.platform_contract import compose_platform_recipe, recipe_to_definition
+#| sorting-hat: remove
+from rse_workbench.platform_image import Installable
+```
+
+And we also import the `compose_platform_recipe` and `recipe_to_definition` 
+functions, which allow us to compose a Singularity definition file from our 
+platform and basic installables. This is a structured way to define the 
+platform image, and is wrapped in a Python function for our convenience.
+
+```{python}
+#| sorting-hat: remove
+from rse_workbench.platform_image import compose_platform_recipe, recipe_to_definition
 ```
 
 ## Platform tools
@@ -56,7 +70,12 @@ install -m 0755 "$CODE_BIN" /usr/local/bin/code
     ],
     test=["command -v code", "code --version"],
 )
+```
 
+To manage our R and Python environments, we use `rv` and `uv`, respectively. These are installed in the platform image, and are available as binaries:
+
+```{python}
+#| sorting-hat: remove
 rv = Installable(
     name="rv",
     kind="binary",
@@ -92,7 +111,13 @@ install -m 0755 "$UV_BIN" /usr/local/bin/uv
     ],
     test=["command -v uv", "uv --version"],
 )
+```
 
+We will also install Quarto, which is a publishing system for data science. 
+Quarto is installed in the platform image, and is available as a binary:
+
+```{python}
+#| sorting-hat: remove
 quarto = Installable(
     name="quarto",
     kind="binary",
@@ -119,7 +144,7 @@ ln -sf "/opt/quarto/${QUARTO_VERSION}/bin/quarto" /usr/local/bin/quarto
 )
 ```
 
-`arf` is useful but not part of the required platform contract. Keep it optional until embedded R is stable.
+`arf` is useful but not a required part of the platform image. Keep it optional until embedded R is stable.
 
 ```{python}
 #| sorting-hat: remove
@@ -169,6 +194,7 @@ sure that it always knows how to reference Spack's configuration
 and cache directories:
 
 ```{python}
+#| sorting-hat: remove
 recipe.environ.extend(
     [
         "PATH=/usr/local/bin:/opt/spack/bin:/usr/bin:/usr/sbin:/sbin:/bin",
@@ -183,8 +209,9 @@ recipe.environ.extend(
 Finally, we write the Singularity definition to file:
 
 ```{python}
+#| sorting-hat: remove
 definition = recipe_to_definition(recipe)
-SINGULARITY_DEF.write_text(definition)
+project_contract.singularity_def.write_text(definition)
 print(definition)
 ```
 

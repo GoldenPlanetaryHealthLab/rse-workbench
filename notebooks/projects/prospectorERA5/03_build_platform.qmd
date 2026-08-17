@@ -21,7 +21,7 @@ The following code may take some time as it runs in the foreground:
 
 ```{python}
 Client.build(
-    image=str(project_contract.singularity_image),
+    image=str(project_contract.build_image),
     recipe=str(project_contract.singularity_def),
     options=["--fakeroot", "--sandbox", "--fix-perms"],
     sudo=False,
@@ -56,7 +56,7 @@ uv --version
 code --version
 quarto --version
 ''',
-        image=project_contract.base_image,
+        image=project_contract.build_image,
         options=["--no-home"],
     ),
     tail=120,

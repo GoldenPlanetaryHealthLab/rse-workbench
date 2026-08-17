@@ -24,4 +24,11 @@ dependencies = [
     "rmarkdown",
     "remotes",
     "box",
+    "stringr",
+    "dplyr",
+    "yaml",
+    "targets",
+    "jgd",
+    "tarchetypes",
+    "tidyverse",
 ]

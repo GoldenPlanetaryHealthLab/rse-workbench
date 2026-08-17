@@ -1,5 +1,5 @@
 ---
-title: "02 Build Platform"
+title: "03 Build Platform"
 format: gfm
 execute:
   eval: false
@@ -21,8 +21,8 @@ The following code may take some time as it runs in the foreground:
 
 ```{python}
 Client.build(
-    image=str(SINGULARITY_IMAGE),
-    recipe=str(SINGULARITY_DEF),
+    image=str(project_contract.build_image),
+    recipe=str(project_contract.singularity_def),
     options=["--fakeroot", "--sandbox", "--fix-perms", "--force"],
     sudo=False,
 )
@@ -55,7 +55,7 @@ uv --version
 code --version
 quarto --version
 ''',
-        image=SINGULARITY_IMAGE,
+        image=project_contract.build_image,
         options=["--no-home"],
     ),
     tail=120,

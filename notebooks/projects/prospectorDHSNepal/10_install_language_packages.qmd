@@ -1,5 +1,5 @@
 ---
-title: "09 Install Language Package Layer"
+title: "10 Install Language Package Layer"
 format: gfm
 execute:
   eval: false
@@ -11,26 +11,31 @@ Note that from here on out, you should be binding your fake $HOME directory
 to `CONTAINER_HOME`, and your fake $TMP directory to `CONTAINER_TMP`, so that R and Python package installations can write to a writable home and tmp directory.
 
 ```{python}
+#| sorting-hat: remove
 import submitit
 from rse_workbench.helpers import show_submitit_job
 from rse_workbench.build_install import install_in_container
 ```
 
 ```{python}
-executor = submitit.AutoExecutor(folder=str(SUBMITIT_DIR / "%j"))
+#| sorting-hat: remove
+executor = submitit.AutoExecutor(folder=str(project_contract.submitit_dir / "%j"))
 executor.update_parameters(
-    timeout_min=SLURM_HOURS * 60,
-    slurm_partition=SLURM_PARTITION,
-    mem_gb=float(SLURM_MEM.rstrip("G")),
-    cpus_per_task=SLURM_CPUS,
-    slurm_job_name=f"install-lang-{PROJECT_NAME}",
-    mail_user=SLURM_EMAIL,
+    timeout_min=project_contract.slurm_build_hours * 60,
+    slurm_partition=project_contract.slurm_build_partition,
+    mem_gb=float(project_contract.slurm_build_mem.rstrip("G")),
+    cpus_per_task=project_contract.slurm_build_cpus,
+    slurm_job_name=f"install-langs-{project_contract.project_name}",
+    mail_user=project_contract.slurm_email,
 )
 ```
 
 ```{python}
+#| sorting-hat: remove
 LANGUAGE_INSTALL_COMMAND = r'''
 set -euo pipefail
+
+cd /work
 
 source /work/env/activate.sh
 
@@ -51,16 +56,18 @@ echo LANGUAGE_INSTALL_DONE
 ```
 
 ```{python}
+#| sorting-hat: remove
 job = executor.submit(
     install_in_container,
-    project_dir=PROJECT_DIR,
-    SINGULARITY_IMAGE=SINGULARITY_IMAGE,
+    project_dir=project_contract.project_dir,
+    SINGULARITY_IMAGE=project_contract.singularity_image,
     runtime_command=LANGUAGE_INSTALL_COMMAND,
 )
 job.job_id
 ```
 
 ```{python}
+#| sorting-hat: remove
 result = show_submitit_job(job)
 if result is not None:
     print(''.join(result['message']))
@@ -75,7 +82,7 @@ set -euo pipefail
 source /work/env/activate.sh
 cd /work
 
-rv sync
+#rv sync
 
 Rscript -e '
 cat("R.home(): ", R.home(), "\n\n")
@@ -85,16 +92,18 @@ cat("\nknitr:\n")
 print(find.package("knitr"))
 cat("\nrmarkdown:\n")
 print(find.package("rmarkdown"))
+cat("\nrdhs:\n")
+print(find.package("rdhs"))
 '
 
 quarto check knitr
 """,
-        image=SINGULARITY_IMAGE,
+        image=project_contract.singularity_image,
         options=[
-            "--home", f"{CONTAINER_HOME}:/home/rse",
-            "--bind", f"{CONTAINER_TMP}:/tmp",
+            "--home", f"{project_contract.container_home}:/home/rse",
+            "--bind", f"{project_contract.container_tmp}:/tmp",
         ],
-        bind_project=PROJECT_DIR,
+        bind_project=project_contract.project_dir,
     ),
     tail=240,
 )
